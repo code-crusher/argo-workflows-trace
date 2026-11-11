@@ -99,10 +99,17 @@ func createPostGresDBSession(ctx context.Context, kubectlConfig kubernetes.Inter
 
 // createMySQLDBSession creates Mysql DB session
 func createMySQLDBSession(ctx context.Context, kubectlConfig kubernetes.Interface, namespace string, cfg *config.MySQLConfig, persistPool *config.ConnectionPool, connectTimeout time.Duration) (db.Session, error) {
+	awsEnabled := cfg.AWSRDSToken != nil && cfg.AWSRDSToken.Enabled
+
 	userNameByte, err := util.GetSecrets(ctx, kubectlConfig, namespace, cfg.UsernameSecret.Name, cfg.UsernameSecret.Key)
 	if err != nil {
 		return nil, err
 	}
+
+	if awsEnabled {
+		return createMySQLDBSessionWithAWSRDS(cfg, persistPool, string(userNameByte), connectTimeout)
+	}
+
 	passwordByte, err := util.GetSecrets(ctx, kubectlConfig, namespace, cfg.PasswordSecret.Name, cfg.PasswordSecret.Key)
 	if err != nil {
 		return nil, err
@@ -287,6 +294,51 @@ func createMySQLDBSessionWithCreds(cfg *config.MySQLConfig, persistPool *config.
 		return nil, err
 	}
 
+	return createMySQLDBSessionWithConnector(cfg, persistPool, mysqlCfg, connectTimeout)
+}
+
+// buildMySQLConfigWithAWSRDS builds the driver config for AWS RDS IAM
+// authentication. RDS sends IAM tokens using MySQL's cleartext authentication
+// plugin, so TLS must be enabled to keep the token off the wire in plaintext.
+func buildMySQLConfigWithAWSRDS(cfg *config.MySQLConfig, username string, connectTimeout time.Duration) (*mysql.Config, error) {
+	mysqlCfg, err := buildMySQLConfig(cfg, username, "", connectTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	if mysqlCfg.TLS == nil || mysqlCfg.AllowFallbackToPlaintext {
+		return nil, fmt.Errorf(`TLS must be enabled (e.g. options: tls: "true") when using AWS RDS IAM authentication`)
+	}
+
+	// RDS requires the cleartext plugin for IAM authentication.
+	mysqlCfg.AllowCleartextPasswords = true
+
+	// Tokens expire after 15 minutes, so build a fresh one for every new
+	// connection rather than reusing the one created with the session.
+	region := cfg.AWSRDSToken.Region
+	err = mysqlCfg.Apply(mysql.BeforeConnect(func(ctx context.Context, connCfg *mysql.Config) error {
+		return setMySQLRDSIAMPassword(ctx, connCfg, region, username)
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("failed to configure AWS RDS IAM authentication: %w", err)
+	}
+
+	return mysqlCfg, nil
+}
+
+// createMySQLDBSessionWithAWSRDS creates a MySQL session using AWS RDS IAM authentication.
+func createMySQLDBSessionWithAWSRDS(cfg *config.MySQLConfig, persistPool *config.ConnectionPool, username string, connectTimeout time.Duration) (db.Session, error) {
+	mysqlCfg, err := buildMySQLConfigWithAWSRDS(cfg, username, connectTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	return createMySQLDBSessionWithConnector(cfg, persistPool, mysqlCfg, connectTimeout)
+}
+
+// createMySQLDBSessionWithConnector creates a MySQL session from an already
+// built driver config, bounding connection establishment by connectTimeout.
+func createMySQLDBSessionWithConnector(cfg *config.MySQLConfig, persistPool *config.ConnectionPool, mysqlCfg *mysql.Config, connectTimeout time.Duration) (db.Session, error) {
 	// Wrap the MySQL connector so Connect (dial + handshake read) is bounded by
 	// connectTimeout, protecting against a half-open server the same way lib/pq's
 	// connect_timeout protects PostgreSQL.
