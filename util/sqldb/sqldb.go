@@ -301,6 +301,10 @@ func createMySQLDBSessionWithCreds(cfg *config.MySQLConfig, persistPool *config.
 // authentication. RDS sends IAM tokens using MySQL's cleartext authentication
 // plugin, so TLS must be enabled to keep the token off the wire in plaintext.
 func buildMySQLConfigWithAWSRDS(cfg *config.MySQLConfig, username string, connectTimeout time.Duration) (*mysql.Config, error) {
+	if cfg.AWSRDSToken == nil || !cfg.AWSRDSToken.Enabled {
+		return nil, fmt.Errorf("awsRDSToken must be enabled to use AWS RDS IAM authentication")
+	}
+
 	mysqlCfg, err := buildMySQLConfig(cfg, username, "", connectTimeout)
 	if err != nil {
 		return nil, err

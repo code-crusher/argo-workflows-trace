@@ -35,7 +35,7 @@ Example:
 
     kubectl create secret generic argo-postgres-config -n argo --from-literal=password=mypassword --from-literal=username=argodbuser
 
-Instead of a static password, you can authenticate to some managed PostgreSQL services with short-lived tokens.
+Instead of a static password, you can authenticate to some managed database services with short-lived tokens.
 See [IAM-based Authentication](#iam-based-authentication).
 
 The following tables will be created in the database when you start the workflow controller with enabled archive:
@@ -49,7 +49,7 @@ The following tables will be created in the database when you start the workflow
 
 > v4.1 and after
 
-For PostgreSQL, the controller can authenticate to the database with short-lived cloud IAM tokens instead of a static password.
+The controller can authenticate to PostgreSQL and MySQL-compatible databases with short-lived cloud IAM tokens instead of a static password.
 Use this to avoid storing long-lived database passwords in Kubernetes secrets.
 When token authentication is enabled the `passwordSecret` is not used, but you must still provide a `userNameSecret` containing the database user that is mapped to your cloud identity.
 Only one token mechanism can be enabled at a time.
@@ -80,7 +80,7 @@ The token scope defaults to `https://ossrdbms-aad.database.windows.net/.default`
 
 ### AWS RDS IAM
 
-To connect to an AWS RDS for PostgreSQL database using [IAM database authentication](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAM.html), enable `awsRDSToken`:
+To connect to an AWS RDS database using [IAM database authentication](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAM.html), enable `awsRDSToken` under `postgresql`:
 
     persistence:
       archive: true
@@ -100,6 +100,27 @@ To connect to an AWS RDS for PostgreSQL database using [IAM database authenticat
 The controller requests an IAM authentication token for each new database connection using the default AWS credential chain, which supports IAM Roles for Service Accounts (IRSA), instance profiles and other standard mechanisms.
 The `region` field is optional and is auto-detected from the environment if omitted.
 You must enable SSL with `ssl: true` to use AWS RDS IAM authentication.
+
+For AWS RDS for MySQL, RDS for MariaDB and Aurora MySQL, enable `awsRDSToken` under `mysql` instead:
+
+    persistence:
+      archive: true
+      mysql:
+        host: example.eu-west-1.rds.amazonaws.com
+        port: 3306
+        database: argo
+        tableName: argo_workflows
+        userNameSecret:
+          name: argo-mysql-config
+          key: username
+        options:
+          tls: "true"
+        awsRDSToken:
+          enabled: true
+          region: eu-west-1
+
+RDS sends IAM tokens using MySQL's cleartext authentication plugin, so you must enable TLS with the `tls` connection option.
+The controller builds a fresh token for each new connection, so no `passwordSecret` is needed.
 
 ### Other providers
 
