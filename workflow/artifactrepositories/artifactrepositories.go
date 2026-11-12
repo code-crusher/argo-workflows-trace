@@ -14,6 +14,7 @@ import (
 	wfv1 "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 	errorsutil "github.com/argoproj/argo-workflows/v4/util/errors"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
 	"github.com/argoproj/argo-workflows/v4/util/retry"
 	waitutil "github.com/argoproj/argo-workflows/v4/util/wait"
 )
@@ -26,21 +27,35 @@ type Interface interface {
 }
 
 func New(kubernetesInterface kubernetes.Interface, namespace string, defaultArtifactRepository *wfv1.ArtifactRepository) Interface {
-	return &artifactRepositories{kubernetesInterface, namespace, defaultArtifactRepository}
+	// namespace is the managed-namespace scope: "" for all namespaces, a single
+	// namespace, or a comma-separated allowlist. When resolving a fallback, an
+	// allowlist tries each managed namespace in order.
+	return &artifactRepositories{kubernetesInterface, namespace, namespaces.Parse(namespace), defaultArtifactRepository}
 }
 
 type artifactRepositories struct {
 	kubernetesInterface       kubernetes.Interface
 	namespace                 string
+	namespaces                []string
 	defaultArtifactRepository *wfv1.ArtifactRepository
 }
 
 func (s *artifactRepositories) Resolve(ctx context.Context, ref *wfv1.ArtifactRepositoryRef, workflowNamespace string) (*wfv1.ArtifactRepositoryRefStatus, error) {
+	// the fallback namespaces to try after the workflow's own namespace: the
+	// managed namespace, or each namespace of an allowlist
+	fallbackNamespaces := s.namespaces
+	if len(fallbackNamespaces) == 0 {
+		fallbackNamespaces = []string{s.namespace}
+	}
 	var refs []*wfv1.ArtifactRepositoryRefStatus
 	if ref != nil {
-		refs = []*wfv1.ArtifactRepositoryRefStatus{
-			{Namespace: workflowNamespace, ArtifactRepositoryRef: wfv1.ArtifactRepositoryRef{ConfigMap: ref.ConfigMap, Key: ref.Key}},
-			{Namespace: s.namespace, ArtifactRepositoryRef: wfv1.ArtifactRepositoryRef{ConfigMap: ref.ConfigMap, Key: ref.Key}},
+		refs = append(refs, &wfv1.ArtifactRepositoryRefStatus{
+			Namespace: workflowNamespace, ArtifactRepositoryRef: wfv1.ArtifactRepositoryRef{ConfigMap: ref.ConfigMap, Key: ref.Key},
+		})
+		for _, ns := range fallbackNamespaces {
+			refs = append(refs, &wfv1.ArtifactRepositoryRefStatus{
+				Namespace: ns, ArtifactRepositoryRef: wfv1.ArtifactRepositoryRef{ConfigMap: ref.ConfigMap, Key: ref.Key},
+			})
 		}
 	} else {
 		refs = []*wfv1.ArtifactRepositoryRefStatus{

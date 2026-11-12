@@ -9,6 +9,7 @@ import (
 	wfv1 "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 	"github.com/argoproj/argo-workflows/v4/server/auth"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
 )
 
 type infoServer struct {
@@ -74,5 +75,11 @@ func (i *infoServer) CollectEvent(ctx context.Context, req *infopkg.CollectEvent
 }
 
 func NewInfoServer(managedNamespace string, links []*wfv1.Link, columns []*wfv1.Column, navColor string) infopkg.InfoServiceServer {
+	// With an allowlist of managed namespaces there is no single namespace to
+	// report: keep the UI's namespace selector instead of pinning it to a raw
+	// comma-separated scope that is not a valid namespace.
+	if namespaces.IsMultiple(managedNamespace) {
+		managedNamespace = ""
+	}
 	return &infoServer{managedNamespace, links, columns, navColor}
 }

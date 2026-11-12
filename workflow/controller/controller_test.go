@@ -42,6 +42,7 @@ import (
 	wfextv "github.com/argoproj/argo-workflows/v4/pkg/client/informers/externalversions"
 	envutil "github.com/argoproj/argo-workflows/v4/util/env"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
 	"github.com/argoproj/argo-workflows/v4/util/telemetry"
 	armocks "github.com/argoproj/argo-workflows/v4/workflow/artifactrepositories/mocks"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
@@ -186,13 +187,15 @@ func newController(ctx context.Context, options ...any) (context.CancelFunc, *Wo
 
 	// always compare to WorkflowController.Run to see what this block of code should be doing
 	{
-		wfc.wfInformer = util.NewWorkflowInformer(ctx, dynamicClient, "", 0, wfc.tweakListRequestListOptions, wfc.tweakWatchRequestListOptions, newIndexers(wfc.indexWorkflowSemaphoreKeys))
+		// the managed-namespace scope is "" unless a test sets it, matching NewWorkflowController
+		scope := wfc.GetManagedNamespaceScope()
+		wfc.wfInformer = util.NewWorkflowInformer(ctx, dynamicClient, scope, 0, wfc.tweakListRequestListOptions, wfc.tweakWatchRequestListOptions, newIndexers(wfc.indexWorkflowSemaphoreKeys))
 		wfc.wfTaskSetInformer = informerFactory.Argoproj().V1alpha1().WorkflowTaskSets()
 		wfc.artGCTaskInformer = informerFactory.Argoproj().V1alpha1().WorkflowArtifactGCTasks()
 		wfc.taskResultInformer = wfc.newWorkflowTaskResultInformer(ctx)
 		wfc.wftmplInformer = informerFactory.Argoproj().V1alpha1().WorkflowTemplates()
 		_ = wfc.addWorkflowInformerHandlers(ctx)
-		wfc.PodController = pod.NewController(ctx, &wfc.Config, wfc.restConfig, "", wfc.kubeclientset, wfc.wfInformer, wfc.metrics, wfc.enqueueWfFromPodLabel)
+		wfc.PodController = pod.NewController(ctx, &wfc.Config, wfc.restConfig, scope, wfc.kubeclientset, wfc.wfInformer, wfc.metrics, wfc.enqueueWfFromPodLabel)
 
 		wfc.typedConfigMapInformer = wfc.newTypedConfigMapInformer(ctx)
 		wfc.createSynchronizationManager(ctx)
@@ -1940,4 +1943,83 @@ func addNamespaceDefaults(t *testing.T, controller *WorkflowController, namespac
 		},
 		Data: map[string]string{namespacedefaults.Key: value},
 	}))
+}
+
+func TestManagedNamespaceAccessors(t *testing.T) {
+	// the scope accessors read the raw configured scope
+	assert.Equal(t, "", (&WorkflowController{}).GetManagedNamespaceScope())
+	assert.Equal(t, "ns-1", (&WorkflowController{managedNamespace: "ns-1"}).GetManagedNamespaceScope())
+	assert.Equal(t, "ns-1,ns-2", (&WorkflowController{managedNamespace: "ns-1,ns-2"}).GetManagedNamespaceScope())
+	// the installation namespace is the fallback when nothing was configured
+	assert.Equal(t, "argo", (&WorkflowController{Config: config.Config{Namespace: "argo"}}).GetManagedNamespaceScope())
+	assert.Equal(t, "argo", (&WorkflowController{Config: config.Config{Namespace: "argo"}}).GetManagedNamespace())
+	// ListOrAll: nil means all namespaces, several names that allowlist
+	assert.Equal(t, []string{""}, (&WorkflowController{}).GetManagedNamespaceListOrAll())
+	assert.Equal(t, []string{"ns-1", "ns-2"}, (&WorkflowController{managedNamespace: "ns-1,ns-2"}).GetManagedNamespaceListOrAll())
+}
+
+// An allowlist of managed namespaces (issue #16980): a controller configured with a
+// comma-separated scope watches every namespace in the list and reconciles workflows
+// in all of them.
+func TestMultipleManagedNamespaces(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+	managedNamespace := "ns-1,ns-2"
+	cancel, controller := newController(ctx,
+		wfv1.MustUnmarshalWorkflow(`
+metadata:
+  name: my-ns-1-wf
+  namespace: ns-1
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      container:
+        image: my-image
+`),
+		wfv1.MustUnmarshalWorkflow(`
+metadata:
+  name: my-ns-2-wf
+  namespace: ns-2
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      container:
+        image: my-image
+`),
+		wfv1.MustUnmarshalWorkflow(`
+metadata:
+  name: my-ns-3-wf
+  namespace: ns-3
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      container:
+        image: my-image
+`),
+		func(controller *WorkflowController) {
+			// set before the fixture builds informers, which fan out over the scope
+			controller.managedNamespace = managedNamespace
+			controller.managedNamespaces = namespaces.Parse(managedNamespace)
+		},
+	)
+	defer cancel()
+
+	assert.Equal(t, []string{"ns-1", "ns-2"}, controller.GetManagedNamespaceList())
+
+	// both allowlisted workflows are in the informer cache; ns-3 is not
+	assert.Len(t, controller.wfInformer.GetIndexer().ListKeys(), 2)
+
+	// both get reconciled: each gets its entrypoint node
+	assert.True(t, controller.processNextItem(ctx))
+	assert.True(t, controller.processNextItem(ctx))
+	expectNamespacedWorkflow(ctx, controller, "ns-1", "my-ns-1-wf", func(wf *wfv1.Workflow) {
+		require.NotNil(t, wf)
+		assert.NotEmpty(t, wf.Status.Nodes)
+	})
+	expectNamespacedWorkflow(ctx, controller, "ns-2", "my-ns-2-wf", func(wf *wfv1.Workflow) {
+		require.NotNil(t, wf)
+		assert.NotEmpty(t, wf.Status.Nodes)
+	})
 }

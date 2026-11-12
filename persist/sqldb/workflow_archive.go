@@ -21,6 +21,7 @@ import (
 	"github.com/argoproj/argo-workflows/v4/util/env"
 	"github.com/argoproj/argo-workflows/v4/util/instanceid"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
 	"github.com/argoproj/argo-workflows/v4/util/sqldb"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
 )
@@ -94,6 +95,7 @@ type workflowArchive struct {
 	sessionProxy      *sqldb.SessionProxy
 	clusterName       string
 	managedNamespace  string
+	managedNamespaces []string
 	instanceIDService instanceid.Service
 	dbType            sqldb.DBType
 }
@@ -102,9 +104,18 @@ func (r *workflowArchive) IsEnabled() bool {
 	return true
 }
 
-// NewWorkflowArchive returns a new workflowArchive
+// NewWorkflowArchive returns a new workflowArchive. The managedNamespace is the
+// managed-namespace scope: "" for all namespaces, a single namespace, or a
+// comma-separated allowlist; archived workflows outside the scope are not visible.
 func NewWorkflowArchive(sessionProxy *sqldb.SessionProxy, clusterName, managedNamespace string, instanceIDService instanceid.Service) WorkflowArchive {
-	return &workflowArchive{sessionProxy: sessionProxy, clusterName: clusterName, managedNamespace: managedNamespace, instanceIDService: instanceIDService, dbType: sessionProxy.DBType()}
+	return &workflowArchive{
+		sessionProxy:      sessionProxy,
+		clusterName:       clusterName,
+		managedNamespace:  managedNamespace,
+		managedNamespaces: namespaces.Parse(managedNamespace),
+		instanceIDService: instanceIDService,
+		dbType:            sessionProxy.DBType(),
+	}
 }
 
 func (r *workflowArchive) ArchiveWorkflow(ctx context.Context, wf *wfv1.Workflow) error {
@@ -518,7 +529,7 @@ func (r *workflowArchive) HasMoreWorkflows(ctx context.Context, options sutils.L
 func (r *workflowArchive) clusterManagedNamespaceAndInstanceID() *db.AndExpr {
 	return db.And(
 		db.Cond{"clustername": r.clusterName},
-		namespaceEqual(r.managedNamespace),
+		namespaceIn(r.managedNamespaces),
 		db.Cond{"instanceid": r.instanceIDService.InstanceID()},
 	)
 }
@@ -556,6 +567,20 @@ func namespaceEqual(namespace string) db.Cond {
 		return db.Cond{"namespace": namespace}
 	}
 	return db.Cond{}
+}
+
+// namespaceIn restricts archived workflows to the managed namespaces. An empty
+// list means all namespaces, a single entry stays a plain equality, and an
+// allowlist becomes an IN clause.
+func namespaceIn(namespaces []string) db.Cond {
+	switch len(namespaces) {
+	case 0:
+		return db.Cond{}
+	case 1:
+		return db.Cond{"namespace": namespaces[0]}
+	default:
+		return db.Cond{"namespace IN": namespaces}
+	}
 }
 
 func namespaceNotEqual(namespace string) db.Cond {

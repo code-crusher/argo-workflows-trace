@@ -31,8 +31,10 @@ import (
 	"github.com/argoproj/argo-workflows/v4/util/env"
 	informerutil "github.com/argoproj/argo-workflows/v4/util/informer"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
 	"github.com/argoproj/argo-workflows/v4/util/wfcontext"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
+	controllerInformer "github.com/argoproj/argo-workflows/v4/workflow/controller/informer"
 	"github.com/argoproj/argo-workflows/v4/workflow/events"
 	"github.com/argoproj/argo-workflows/v4/workflow/metrics"
 	"github.com/argoproj/argo-workflows/v4/workflow/namespacedefaults"
@@ -107,9 +109,16 @@ func (cc *Controller) Run(ctx context.Context) {
 	defer cc.cronWfQueue.ShutDown()
 	cc.logger.WithField("instanceID", cc.instanceID).Info(ctx, "Starting CronWorkflow controller")
 
-	cc.cronWfInformer = dynamicinformer.NewFilteredDynamicSharedInformerFactory(cc.dynamicInterface, cronWorkflowResyncPeriod, cc.managedNamespace, func(options *v1.ListOptions) {
-		cronWfInformerListOptionsFunc(options, cc.instanceID)
-	}).ForResource(schema.GroupVersionResource{Group: workflow.Group, Version: workflow.Version, Resource: workflow.CronWorkflowPlural})
+	cronWfGVR := schema.GroupVersionResource{Group: workflow.Group, Version: workflow.Version, Resource: workflow.CronWorkflowPlural}
+	if len(namespaces.Parse(cc.managedNamespace)) > 1 {
+		cc.cronWfInformer = controllerInformer.NewMultiNamespaceDynamicInformer(cc.dynamicInterface, cronWfGVR, namespaces.Parse(cc.managedNamespace), cronWorkflowResyncPeriod, func(options *v1.ListOptions) {
+			cronWfInformerListOptionsFunc(options, cc.instanceID)
+		})
+	} else {
+		cc.cronWfInformer = dynamicinformer.NewFilteredDynamicSharedInformerFactory(cc.dynamicInterface, cronWorkflowResyncPeriod, cc.managedNamespace, func(options *v1.ListOptions) {
+			cronWfInformerListOptionsFunc(options, cc.instanceID)
+		}).ForResource(cronWfGVR)
+	}
 	//nolint:errcheck // the error only happens if the informer was already started, and it hasn't been
 	cc.cronWfInformer.Informer().SetTransform(informerutil.StripManagedFields)
 	err := cc.addCronWorkflowInformerHandler(ctx)

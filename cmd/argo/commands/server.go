@@ -31,6 +31,7 @@ import (
 	cmdutil "github.com/argoproj/argo-workflows/v4/util/cmd"
 	"github.com/argoproj/argo-workflows/v4/util/help"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
 	pprofutil "github.com/argoproj/argo-workflows/v4/util/pprof"
 	tlsutils "github.com/argoproj/argo-workflows/v4/util/tls"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
@@ -100,6 +101,9 @@ See %s`, help.ArgoServer()),
 			}
 			if namespaced && managedNamespace == "" {
 				managedNamespace = namespace
+			}
+			if len(namespaces.Parse(managedNamespace)) > 1 {
+				logger.WithField("managedNamespaces", namespaces.Parse(managedNamespace)).Info(ctx, "Serving multiple namespaces")
 			}
 
 			ssoNamespace := namespace
@@ -201,7 +205,7 @@ See %s`, help.ArgoServer()),
 	command.Flags().StringArrayVar(&authModes, "auth-mode", []string{"client"}, "API server authentication mode. Any 1 or more length permutation of: client,server,sso")
 	command.Flags().StringVar(&configMap, "configmap", common.ConfigMapName, "Name of K8s configmap to retrieve workflow controller configuration")
 	command.Flags().BoolVar(&namespaced, "namespaced", false, "run as namespaced mode")
-	command.Flags().StringVar(&managedNamespace, "managed-namespace", "", "namespace that watches, default to the installation namespace")
+	command.Flags().StringVar(&managedNamespace, "managed-namespace", "", "namespace that watches, default to the installation namespace; pass a comma-separated list to watch several namespaces")
 	command.Flags().BoolVarP(&enableOpenBrowser, "browser", "b", false, "enable automatic launching of the browser [local mode]")
 	command.Flags().IntVar(&eventOperationQueueSize, "event-operation-queue-size", 16, "how many events operations that can be queued at once")
 	command.Flags().IntVar(&eventWorkerCount, "event-worker-count", 4, "how many event workers to run")

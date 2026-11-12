@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/upper/db/v4"
 
 	wfv1 "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 )
@@ -41,4 +42,14 @@ func Test_archivedWorkflowMetadata_argumentsUnmarshal(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_namespaceIn(t *testing.T) {
+	// all namespaces: no condition
+	assert.Equal(t, db.Cond{}, namespaceIn(nil))
+	assert.Equal(t, db.Cond{}, namespaceIn([]string{}))
+	// single namespace: plain equality
+	assert.Equal(t, db.Cond{"namespace": "ns-1"}, namespaceIn([]string{"ns-1"}))
+	// allowlist: IN clause
+	assert.Equal(t, db.Cond{"namespace IN": []string{"ns-1", "ns-2"}}, namespaceIn([]string{"ns-1", "ns-2"}))
 }

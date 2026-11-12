@@ -6,28 +6,55 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
+
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
+	unstructuredutil "github.com/argoproj/argo-workflows/v4/util/unstructured"
 )
 
 type ResourceCache struct {
 	cache  Interface
 	client kubernetes.Interface
 	v1.ServiceAccountLister
-	informerFactory informers.SharedInformerFactory
+	saInformer cache.SharedIndexInformer
 }
 
 func NewResourceCacheWithTimeout(client kubernetes.Interface, namespace string, timeout time.Duration) *ResourceCache {
-	informerFactory := informers.NewSharedInformerFactoryWithOptions(client, time.Minute*20, informers.WithNamespace(namespace))
-	cache := &ResourceCache{
+	// namespace is the managed-namespace scope: "" for all namespaces, one namespace, or
+	// a comma-separated allowlist
+	saInformer := newServiceAccountInformer(client, namespace)
+	c := &ResourceCache{
 		cache:                NewLRUTtlCache(timeout, 2000),
 		client:               client,
-		ServiceAccountLister: informerFactory.Core().V1().ServiceAccounts().Lister(),
-		informerFactory:      informerFactory,
+		ServiceAccountLister: v1.NewServiceAccountLister(saInformer.GetIndexer()),
+		saInformer:           saInformer,
 	}
-	return cache
+	return c
+}
+
+// newServiceAccountInformer watches service accounts in the given managed-namespace
+// scope. A single namespace (or all namespaces) uses the shared informer factory; an
+// allowlist of namespaces needs one lister-watcher fanning out per namespace, which the
+// factory cannot express.
+func newServiceAccountInformer(client kubernetes.Interface, namespace string) cache.SharedIndexInformer {
+	if namespaces.IsMultiple(namespace) {
+		lw := unstructuredutil.NewMultiNamespaceListerWatcherFunc(namespaces.Parse(namespace),
+			func(ctx context.Context, ns string, options metav1.ListOptions) (runtime.Object, error) {
+				return client.CoreV1().ServiceAccounts(ns).List(ctx, options)
+			},
+			func(ctx context.Context, ns string, options metav1.ListOptions) (watch.Interface, error) {
+				return client.CoreV1().ServiceAccounts(ns).Watch(ctx, options)
+			},
+		)
+		return cache.NewSharedIndexInformer(lw, &corev1.ServiceAccount{}, time.Minute*20, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+	}
+	informerFactory := informers.NewSharedInformerFactoryWithOptions(client, time.Minute*20, informers.WithNamespace(namespace))
+	return informerFactory.Core().V1().ServiceAccounts().Informer()
 }
 
 func NewResourceCache(client kubernetes.Interface, namespace string) *ResourceCache {
@@ -35,8 +62,8 @@ func NewResourceCache(client kubernetes.Interface, namespace string) *ResourceCa
 }
 
 func (c *ResourceCache) Run(stopCh <-chan struct{}) {
-	c.informerFactory.Start(stopCh)
-	c.informerFactory.WaitForCacheSync(stopCh)
+	go c.saInformer.Run(stopCh)
+	cache.WaitForCacheSync(stopCh, c.saInformer.HasSynced)
 }
 
 func (c *ResourceCache) GetSecret(ctx context.Context, namespace string, secretName string) (*corev1.Secret, error) {

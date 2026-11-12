@@ -35,6 +35,8 @@ import (
 	"github.com/argoproj/argo-workflows/v4/util/instanceid"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
 	"github.com/argoproj/argo-workflows/v4/util/logs"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
+	unstructuredutil "github.com/argoproj/argo-workflows/v4/util/unstructured"
 	"github.com/argoproj/argo-workflows/v4/workflow/artifactrepositories"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
 	"github.com/argoproj/argo-workflows/v4/workflow/creator"
@@ -85,14 +87,16 @@ func NewServer(ctx context.Context, instanceIDService instanceid.Service, offloa
 		artifactRepositories:  artifactRepositories,
 	}
 	if wfStore != nil && namespace != nil {
-		lw := &cache.ListWatch{
-			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
-				return wfClientSet.ArgoprojV1alpha1().Workflows(*namespace).List(ctx, options)
+		// namespace is the managed-namespace scope: "" for all namespaces, one
+		// namespace, or a comma-separated allowlist
+		lw := unstructuredutil.NewMultiNamespaceListerWatcherFunc(namespaces.Parse(*namespace),
+			func(ctx context.Context, ns string, options metav1.ListOptions) (runtime.Object, error) {
+				return wfClientSet.ArgoprojV1alpha1().Workflows(ns).List(ctx, options)
 			},
-			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
-				return wfClientSet.ArgoprojV1alpha1().Workflows(*namespace).Watch(ctx, options)
+			func(ctx context.Context, ns string, options metav1.ListOptions) (watch.Interface, error) {
+				return wfClientSet.ArgoprojV1alpha1().Workflows(ns).Watch(ctx, options)
 			},
-		}
+		)
 		wfReflector := cache.NewReflector(lw, &wfv1.Workflow{}, wfStore, reSyncDuration)
 		ws.wfReflector = wfReflector
 	}

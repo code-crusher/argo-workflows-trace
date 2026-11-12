@@ -32,7 +32,7 @@ See https://argo-workflows.readthedocs.io/en/latest/argo-server/
       --kube-api-qps float32                 QPS to use while talking with kube-apiserver. (default 20)
       --log-format string                    The formatter to use for logs. One of: text|json (default "text")
       --loglevel string                      Set the logging level. One of: debug|info|warn|error (default "info")
-      --managed-namespace string             namespace that watches, default to the installation namespace
+      --managed-namespace string             namespace that watches, default to the installation namespace; pass a comma-separated list to watch several namespaces
       --namespaced                           run as namespaced mode
   -p, --port int                             Port to listen on (default 2746)
   -e, --secure                               Whether or not we should listen on TLS. (default true)

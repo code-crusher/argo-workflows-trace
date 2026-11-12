@@ -38,6 +38,7 @@ import (
 	jsonutil "github.com/argoproj/argo-workflows/v4/util/json"
 	"github.com/argoproj/argo-workflows/v4/util/kubeconfig"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
 )
 
@@ -261,6 +262,34 @@ func precedence(serviceAccount *corev1.ServiceAccount) int {
 	return i
 }
 
+// getLoginServiceAccount returns the service account matching the SSO RBAC rules in the
+// ssoNamespace, which for a multi-namespace install is an allowlist of namespaces: the
+// highest-precedence matching rule across them wins.
+func (s *gatekeeper) getLoginServiceAccount(claims *authTypes.Claims) (*corev1.ServiceAccount, error) {
+	var best *corev1.ServiceAccount
+	var bestErr error
+	for _, namespace := range namespaces.ParseOrAll(s.ssoNamespace) {
+		serviceAccount, err := s.getServiceAccount(claims, namespace)
+		if err != nil {
+			// remember the first error: if no namespace matches, that is the failure
+			if bestErr == nil {
+				bestErr = err
+			}
+			continue
+		}
+		if best == nil || precedence(serviceAccount) > precedence(best) {
+			best = serviceAccount
+		}
+	}
+	if best != nil {
+		return best, nil
+	}
+	if bestErr != nil {
+		return nil, bestErr
+	}
+	return nil, fmt.Errorf("no service account rule matches")
+}
+
 func (s *gatekeeper) getServiceAccount(claims *authTypes.Claims, namespace string) (*corev1.ServiceAccount, error) {
 	list, err := s.cache.ServiceAccountLister.ServiceAccounts(namespace).List(labels.Everything())
 	if err != nil {
@@ -318,7 +347,7 @@ func (s *gatekeeper) getClientsForServiceAccount(ctx context.Context, claims *au
 func (s *gatekeeper) rbacAuthorization(ctx context.Context, claims *authTypes.Claims, req any) (*servertypes.Clients, error) {
 	logger := logging.RequireLoggerFromContext(ctx)
 	ssoDelegationAllowed, ssoDelegated := false, false
-	loginAccount, err := s.getServiceAccount(claims, s.ssoNamespace)
+	loginAccount, err := s.getLoginServiceAccount(claims)
 	if err != nil && !strings.Contains(err.Error(), "no service account rule matches") {
 		return nil, err
 	}

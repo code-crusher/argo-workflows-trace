@@ -48,7 +48,7 @@ func (wfc *WorkflowController) Healthz(w http.ResponseWriter, r *http.Request) {
 
 		// establish a list of unreconciled workflows
 		unreconciledWorkflows := make(map[string]*wfv1.Workflow)
-		err = cache.ListAllByNamespace(wfc.wfInformer.GetIndexer(), wfc.managedNamespace, selector, func(m any) {
+		appendUnreconciled := func(m any) {
 			// Informer holds Workflows as type *Unstructured
 			un := m.(*unstructured.Unstructured)
 			// verify it's of type *Workflow (if not, it's an incorrectly formatted Workflow spec)
@@ -60,9 +60,12 @@ func (wfc *WorkflowController) Healthz(w http.ResponseWriter, r *http.Request) {
 
 			key := wf.Namespace + "/" + wf.Name
 			unreconciledWorkflows[key] = wf
-		})
-		if err != nil {
-			return fmt.Errorf("Healthz check failed to list Workflows using Informer, err=%w", err)
+		}
+		for _, ns := range wfc.GetManagedNamespaceListOrAll() {
+			err = cache.ListAllByNamespace(wfc.wfInformer.GetIndexer(), ns, selector, appendUnreconciled)
+			if err != nil {
+				return fmt.Errorf("Healthz check failed to list Workflows using Informer, err=%w", err)
+			}
 		}
 
 		unreconciledExceedAge := false
@@ -102,10 +105,10 @@ func (wfc *WorkflowController) Healthz(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logger.WithError(err).
 			WithFields(logging.Fields{
-				"managedNamespace": wfc.managedNamespace,
-				"instanceID":       instanceID,
-				"labelSelector":    labelSelector,
-				"age":              wfc.healthzAge,
+				"managedNamespaces": wfc.GetManagedNamespaceListOrAll(),
+				"instanceID":        instanceID,
+				"labelSelector":     labelSelector,
+				"age":               wfc.healthzAge,
 			}).
 			Info(r.Context(), "healthz")
 		w.WriteHeader(http.StatusInternalServerError)

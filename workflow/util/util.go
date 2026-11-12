@@ -47,6 +47,7 @@ import (
 	errorsutil "github.com/argoproj/argo-workflows/v4/util/errors"
 	informerutil "github.com/argoproj/argo-workflows/v4/util/informer"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
 	"github.com/argoproj/argo-workflows/v4/util/retry"
 	unstructutil "github.com/argoproj/argo-workflows/v4/util/unstructured"
 	varkeys "github.com/argoproj/argo-workflows/v4/util/variables/keys"
@@ -63,17 +64,19 @@ import (
 // objects. We no longer return WorkflowInformer due to:
 // https://github.com/kubernetes/kubernetes/issues/57705
 // https://github.com/argoproj/argo-workflows/issues/632
+// ns is the managed-namespace scope: "" for all namespaces, one namespace, or a
+// comma-separated allowlist of namespaces.
 func NewWorkflowInformer(ctx context.Context, dclient dynamic.Interface, ns string, resyncPeriod time.Duration, tweakListRequestListOptions internalinterfaces.TweakListOptionsFunc, tweakWatchRequestListOptions internalinterfaces.TweakListOptionsFunc, indexers cache.Indexers) cache.SharedIndexInformer {
 	resource := schema.GroupVersionResource{
 		Group:    workflow.Group,
 		Version:  "v1alpha1",
 		Resource: workflow.WorkflowPlural,
 	}
-	informer := unstructutil.NewFilteredUnstructuredInformer(
+	lw := unstructutil.NewMultiNamespaceListerWatcher(dclient, resource, namespaces.Parse(ns))
+	informer := unstructutil.NewFilteredUnstructuredInformerFromListerWatcher(
 		ctx,
-		resource,
+		lw,
 		dclient,
-		ns,
 		resyncPeriod,
 		indexers,
 		tweakListRequestListOptions,

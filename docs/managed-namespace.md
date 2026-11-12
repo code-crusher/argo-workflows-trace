@@ -20,6 +20,27 @@ For example:
         - default
 ```
 
+## Managing multiple namespaces
+
+`--managed-namespace` also accepts a comma-separated allowlist of namespaces, so one
+installation can run Workflows in several namespaces without cluster-wide access:
+
+```yaml
+      - args:
+        - --configmap
+        - workflow-controller-configmap
+        - --executor-image
+        - quay.io/argoproj/argoexec:v4.1.5
+        - --namespaced
+        - --managed-namespace
+        - ns-1,ns-2,ns-3
+```
+
+Pass the same allowlist to both the Workflow Controller and the Argo Server.
+The controller creates one informer per namespace and reconciles Workflows in all of them.
+The server watches the same namespaces and keeps its per-request access control.
+Compared with a cluster-scoped install, this stays on namespace Roles (one per managed namespace) instead of a ClusterRole, at the cost of one list/watch connection per namespace.
+
 Please note that both cluster scoped and namespace scoped configurations require "admin" roles to install because Argo's Custom Resource Definitions (CRDs) must be created (CRDs are cluster scoped objects).
 
 !!! Info "Example Use Case"

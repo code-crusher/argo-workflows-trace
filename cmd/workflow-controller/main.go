@@ -36,6 +36,7 @@ import (
 	kubecli "github.com/argoproj/argo-workflows/v4/util/kube/cli"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
 	"github.com/argoproj/argo-workflows/v4/util/logs"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
 	pprofutil "github.com/argoproj/argo-workflows/v4/util/pprof"
 	"github.com/argoproj/argo-workflows/v4/util/telemetry/ratelimiter"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
@@ -121,6 +122,9 @@ func NewRootCommand() *cobra.Command {
 			}
 			if namespaced && managedNamespace == "" {
 				managedNamespace = namespace
+			}
+			if len(namespaces.Parse(managedNamespace)) > 1 {
+				log.WithField("managedNamespaces", namespaces.Parse(managedNamespace)).Info(ctx, "Watching multiple namespaces")
 			}
 			wfController, err := controller.NewWorkflowController(ctx, config, kubeclientset, wfclientset, namespace, managedNamespace, executorImage, executorImagePullPolicy, logFormat, configMap, executorPlugins, workflowLevelExecutorPlugins)
 			if err != nil {
@@ -220,7 +224,7 @@ func NewRootCommand() *cobra.Command {
 	command.Flags().IntVar(&burst, "burst", 30, "Maximum burst for throttle.")
 	command.Flags().Float32Var(&qps, "qps", 20.0, "Queries per second")
 	command.Flags().BoolVar(&namespaced, "namespaced", false, "run workflow-controller as namespaced mode")
-	command.Flags().StringVar(&managedNamespace, "managed-namespace", "", "namespace that workflow-controller watches, default to the installation namespace")
+	command.Flags().StringVar(&managedNamespace, "managed-namespace", "", "namespace that workflow-controller watches, default to the installation namespace; pass a comma-separated list to watch several namespaces")
 	command.Flags().BoolVar(&executorPlugins, "executor-plugins", false, "enable executor plugins")
 	command.Flags().BoolVar(&workflowLevelExecutorPlugins, "workflow-level-executor-plugins", false, "enable workflow-level executor plugins")
 	ctx, log, err := cmdutil.ContextWithLogger(&command, logLevel, logFormat)

@@ -26,6 +26,8 @@ import (
 	"github.com/argoproj/argo-workflows/v4/util/diff"
 	informerutil "github.com/argoproj/argo-workflows/v4/util/informer"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
+	"github.com/argoproj/argo-workflows/v4/util/namespaces"
+	unstructuredutil "github.com/argoproj/argo-workflows/v4/util/unstructured"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
 	"github.com/argoproj/argo-workflows/v4/workflow/controller/indexes"
 	"github.com/argoproj/argo-workflows/v4/workflow/metrics"
@@ -57,7 +59,8 @@ type Controller struct {
 	restConfig    *rest.Config
 }
 
-// NewController creates a pod controller
+// NewController creates a pod controller. The namespace is the managed-namespace scope:
+// "" for all namespaces, a single namespace, or a comma-separated allowlist.
 func NewController(ctx context.Context, config *argoConfig.Config, restConfig *rest.Config, namespace string, clientSet kubernetes.Interface, wfInformer cache.SharedIndexInformer, metrics *metrics.Metrics, callback podEventCallback) *Controller {
 	ctx, log := logging.RequireLoggerFromContext(ctx).WithField("component", "pod_controller").InContext(ctx)
 	podController := &Controller{
@@ -65,7 +68,7 @@ func NewController(ctx context.Context, config *argoConfig.Config, restConfig *r
 		kubeclientset: clientSet,
 		wfInformer:    wfInformer,
 		workqueue:     metrics.RateLimiterWithBusyWorkers(ctx, workqueue.DefaultTypedControllerRateLimiter[string](), "pod_cleanup_queue"),
-		podInformer:   newInformer(clientSet, &config.InstanceID, &namespace),
+		podInformer:   newInformer(clientSet, &config.InstanceID, namespace),
 		log:           log,
 		callBack:      callback,
 		restConfig:    restConfig,
@@ -274,8 +277,7 @@ func (c *Controller) deletePodEvent(ctx context.Context, obj any) {
 	c.commonPodEvent(ctx, pod, true)
 }
 
-func newWorkflowPodWatch(clientSet kubernetes.Interface, instanceID, namespace *string) *cache.ListWatch {
-	c := clientSet.CoreV1().Pods(*namespace)
+func newWorkflowPodWatch(clientSet kubernetes.Interface, instanceID *string, namespace string) cache.ListerWatcher {
 	// completed=false
 	labelSelector := labels.NewSelector().
 		Add(*workflowReq).
@@ -283,7 +285,7 @@ func newWorkflowPodWatch(clientSet kubernetes.Interface, instanceID, namespace *
 		Add(*incompleteReq).
 		Add(util.InstanceIDRequirement(*instanceID))
 
-	listFunc := func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+	listPods := func(ctx context.Context, namespace string, options metav1.ListOptions) (runtime.Object, error) {
 		options.LabelSelector = labelSelector.String()
 		var allPods []apiv1.Pod
 		continueTok := ""
@@ -294,7 +296,7 @@ func newWorkflowPodWatch(clientSet kubernetes.Interface, instanceID, namespace *
 				options.ResourceVersion = ""
 				options.ResourceVersionMatch = ""
 			}
-			podList, err := c.List(ctx, options)
+			podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, options)
 			if err != nil {
 				return nil, err
 			}
@@ -306,17 +308,23 @@ func newWorkflowPodWatch(clientSet kubernetes.Interface, instanceID, namespace *
 		}
 		return &apiv1.PodList{Items: allPods}, nil
 	}
-	watchFunc := func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
+	watchPods := func(ctx context.Context, namespace string, options metav1.ListOptions) (watch.Interface, error) {
 		options.Watch = true
 		options.LabelSelector = labelSelector.String()
-		return c.Watch(ctx, options)
+		return clientSet.CoreV1().Pods(namespace).Watch(ctx, options)
 	}
-	return &cache.ListWatch{ListWithContextFunc: listFunc, WatchFuncWithContext: watchFunc}
+	return unstructuredutil.NewMultiNamespaceListerWatcherFunc(namespaces.Parse(namespace), listPods, watchPods)
 }
 
-func newInformer(clientSet kubernetes.Interface, instanceID, namespace *string) cache.SharedIndexInformer {
-	source := newWorkflowPodWatch(clientSet, instanceID, namespace)
-	informer := cache.NewSharedIndexInformer(cache.ToListWatcherWithWatchListSemantics(source, clientSet), &apiv1.Pod{}, podResyncPeriod, cache.Indexers{
+func newInformer(clientSet kubernetes.Interface, instanceID *string, namespace string) cache.SharedIndexInformer {
+	lw := newWorkflowPodWatch(clientSet, instanceID, namespace)
+	// The multi-namespace ListerWatcher cannot be a *cache.ListWatch, so it skips the
+	// watch-list semantics wrapper; that only suppresses the WatchListClient feature,
+	// which a per-namespace fan-out cannot use anyway.
+	if listWatch, ok := lw.(*cache.ListWatch); ok {
+		lw = cache.ToListWatcherWithWatchListSemantics(listWatch, clientSet)
+	}
+	informer := cache.NewSharedIndexInformer(lw, &apiv1.Pod{}, podResyncPeriod, cache.Indexers{
 		indexes.WorkflowIndex: indexes.MetaWorkflowIndexFunc,
 		indexes.NodeIDIndex:   indexes.MetaNodeIDIndexFunc,
 		indexes.PodPhaseIndex: indexes.PodPhaseIndexFunc,
