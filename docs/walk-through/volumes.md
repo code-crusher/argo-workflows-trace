@@ -50,6 +50,8 @@ spec:
 
 Volumes are a very useful way to move large amounts of data from one step in a workflow to another. Depending on the system, some volumes may be accessible concurrently from multiple steps.
 
+Some tools take file locks inside their cache directory, so a writable cache shared between pods fails even when the volume is reachable from all of them. See [Build Caches](../build-caches.md).
+
 In some cases, you want to access an already existing volume rather than creating/destroying one dynamically.
 
 ```yaml

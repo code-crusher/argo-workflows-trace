@@ -143,6 +143,7 @@ nav:
           - workflow-creator.md
       - Patterns:
           - empty-dir.md
+          - build-caches.md
           - cron-backfill.md
           - workflow-of-workflows.md
           - workflow-notifications.md

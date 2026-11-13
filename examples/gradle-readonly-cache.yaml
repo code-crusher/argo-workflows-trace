@@ -1,0 +1,40 @@
+# This example shows how to share a Gradle dependency cache between pods
+# without sharing a writable Gradle user home. Each pod gets its own
+# emptyDir for GRADLE_USER_HOME, and dependencies are read from a shared
+# read-only cache. Sharing a writable GRADLE_USER_HOME across pods fails at
+# startup with a journal cache lock timeout, because Gradle asks the lock
+# owner to release it over a UDP port that is not reachable across pods.
+# See docs/build-caches.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: gradle-readonly-cache-
+  labels:
+    workflows.argoproj.io/no-test: "environment"
+spec:
+  entrypoint: build
+  volumes:
+  - name: gradle-deps
+    persistentVolumeClaim:
+      claimName: gradle-deps
+      readOnly: true
+  templates:
+  - name: build
+    container:
+      image: gradle:7.4-jdk17
+      command: [sh, -c]
+      args: ["gradle --no-daemon build"]
+      env:
+      - name: GRADLE_USER_HOME
+        value: /home/gradle/.gradle
+      - name: GRADLE_RO_DEP_CACHE
+        value: /opt/gradle-deps
+      volumeMounts:
+      - name: gradle-home
+        mountPath: /home/gradle/.gradle
+      - name: gradle-deps
+        mountPath: /opt/gradle-deps
+        readOnly: true
+    volumes:
+    - name: gradle-home
+      emptyDir: { }
