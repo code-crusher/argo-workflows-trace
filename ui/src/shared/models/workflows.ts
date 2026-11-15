@@ -145,6 +145,10 @@ export interface Artifact {
         strategy?: 'OnWorkflowCompletion' | 'OnWorkflowDeletion';
     };
     deleted?: boolean;
+    /**
+     * Description is the artifact description
+     */
+    description?: string;
 }
 
 /**

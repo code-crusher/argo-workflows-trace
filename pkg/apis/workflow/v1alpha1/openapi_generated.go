@@ -480,6 +480,13 @@ func schema_pkg_apis_workflow_v1alpha1_Artifact(ref common.ReferenceCallback) co
 							Format:      "",
 						},
 					},
+					"description": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Description is the artifact description",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"name"},
 			},
