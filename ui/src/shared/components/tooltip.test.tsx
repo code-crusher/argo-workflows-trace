@@ -88,6 +88,24 @@ describe('Tooltip', () => {
         expect(screen.getByTestId('argo-tooltip').getAttribute('data-max-width')).toBe('unset');
     });
 
+    it('opens on focus as well as hover so keyboard users can reveal the tooltip', () => {
+        render(
+            <Tooltip content='some string'>
+                <span>trigger</span>
+            </Tooltip>
+        );
+        expect(argoTooltipSpy.mock.calls[0][0].trigger).toBe('mouseenter focus');
+    });
+
+    it('lets callers override the trigger', () => {
+        render(
+            <Tooltip content='some string' trigger='click'>
+                <span>trigger</span>
+            </Tooltip>
+        );
+        expect(argoTooltipSpy.mock.calls[0][0].trigger).toBe('click');
+    });
+
     it('defaults boundary to viewport so tooltips are not clipped by scrollable ancestors', () => {
         render(
             <Tooltip content='some string'>

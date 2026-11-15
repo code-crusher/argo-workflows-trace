@@ -3,7 +3,7 @@ import * as React from 'react';
 
 import {ago} from '../duration';
 import useTimestamp, {TIMESTAMP_KEYS} from '../use-timestamp';
-import {Tooltip} from './tooltip';
+import {IconTooltip} from './icon-tooltip';
 
 interface Props {
     date: Date | string | number;
@@ -43,18 +43,16 @@ export function Timestamp({date, timestampKey, displayLocalDateTime, displayISOF
 
 export function TimestampSwitch({storedDisplayISOFormat, setStoredDisplayISOFormat}: {storedDisplayISOFormat: boolean; setStoredDisplayISOFormat: (value: boolean) => void}) {
     return (
-        <Tooltip content={storedDisplayISOFormat ? 'Switch to relative time format' : 'Switch to ISO time format'}>
-            <a>
-                <i
-                    className={'fa fa-clock'}
-                    style={{marginLeft: 4}}
-                    onClick={e => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setStoredDisplayISOFormat(!storedDisplayISOFormat);
-                    }}
-                />
-            </a>
-        </Tooltip>
+        <IconTooltip
+            style={{marginLeft: 4}}
+            content={storedDisplayISOFormat ? 'Switch to relative time format' : 'Switch to ISO time format'}
+            icon='fa fa-clock'
+            label={storedDisplayISOFormat ? 'Switch to relative time format' : 'Switch to ISO time format'}
+            onClick={e => {
+                e.stopPropagation();
+                e.preventDefault();
+                setStoredDisplayISOFormat(!storedDisplayISOFormat);
+            }}
+        />
     );
 }

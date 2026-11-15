@@ -1,7 +1,7 @@
 import * as React from 'react';
 import {useState} from 'react';
 
-import {Tooltip} from './tooltip';
+import {IconTooltip} from './icon-tooltip';
 
 export function ClipboardText({text}: {text: string}) {
     const [justClicked, setJustClicked] = useState(false);
@@ -14,18 +14,16 @@ export function ClipboardText({text}: {text: string}) {
         <>
             {text}
             &nbsp; &nbsp;
-            <Tooltip content={justClicked ? 'Copied!' : 'Copy to clipboard'}>
-                <a>
-                    <i
-                        className={'fa fa-clipboard'}
-                        onClick={() => {
-                            setJustClicked(true);
-                            navigator.clipboard.writeText(text);
-                            setTimeout(() => setJustClicked(false), 2000);
-                        }}
-                    />
-                </a>
-            </Tooltip>
+            <IconTooltip
+                content={justClicked ? 'Copied!' : 'Copy to clipboard'}
+                icon='fa fa-clipboard'
+                label='Copy to clipboard'
+                onClick={() => {
+                    setJustClicked(true);
+                    navigator.clipboard.writeText(text);
+                    setTimeout(() => setJustClicked(false), 2000);
+                }}
+            />
         </>
     );
 }

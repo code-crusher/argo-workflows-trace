@@ -2,8 +2,8 @@ import {Checkbox} from 'argo-ui/src/components/checkbox';
 import React, {useState} from 'react';
 
 import {ErrorNotice} from '../../shared/components/error-notice';
+import {IconTooltip} from '../../shared/components/icon-tooltip';
 import {getValueFromParameter, ParametersInput} from '../../shared/components/parameters-input';
-import {Tooltip} from '../../shared/components/tooltip';
 import {Parameter, RetryOpts, Workflow} from '../../shared/models';
 import {services} from '../../shared/services';
 
@@ -76,12 +76,15 @@ export function RetryWorkflowNode(props: Props) {
 
                 {/* Restart Successful */}
                 <div key='restart-successful' style={{marginBottom: 25}}>
-                    <label>
-                        Restart Successful{' '}
-                        <Tooltip content='Leaving this box unchecked avoids re-running nodes that have run successfully before'>
-                            <i className='fa fa-question-circle' style={{marginLeft: 4}} />
-                        </Tooltip>
-                    </label>
+                    <span>
+                        <label>Restart Successful</label>
+                        <IconTooltip
+                            style={{marginLeft: 4}}
+                            content='Leaving this box unchecked avoids re-running nodes that have run successfully before'
+                            icon='fa fa-question-circle'
+                            label='About restarting successful nodes'
+                        />
+                    </span>
                     <div className='columns small-9'>
                         <Checkbox checked={restartSuccessful} onChange={setRestartSuccessful} />
                     </div>

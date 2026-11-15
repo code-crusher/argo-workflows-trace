@@ -2,7 +2,7 @@ import {Select} from 'argo-ui/src/components/select/select';
 import React from 'react';
 
 import {Parameter} from '../models';
-import {Tooltip} from './tooltip';
+import {IconTooltip} from './icon-tooltip';
 
 export function getValueFromParameter(p: Parameter) {
     if (p.value === undefined) {
@@ -50,9 +50,7 @@ export function ParametersInput(props: ParametersInputProps) {
                 <div key={parameter.name + '_' + index} style={{marginBottom: 14}}>
                     <label>{parameter.name}</label>
                     {parameter.description && (
-                        <Tooltip content={parameter.description}>
-                            <i className='fa fa-question-circle' style={{marginLeft: 4}} />
-                        </Tooltip>
+                        <IconTooltip style={{marginLeft: 4}} content={parameter.description} icon='fa fa-question-circle' label={`Describe parameter ${parameter.name}`} />
                     )}
                     {(parameter.enum && displaySelectFieldForEnumValues(parameter)) || displayInputFieldForSingleValue(parameter)}
                 </div>

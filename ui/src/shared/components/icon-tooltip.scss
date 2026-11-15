@@ -1,0 +1,19 @@
+.icon-tooltip-trigger {
+    // Reset button chrome so the trigger renders as the bare icon it replaces.
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+    vertical-align: baseline;
+
+    &:focus,
+    &:focus-visible {
+        outline: 2px solid #00a2b3; // $argo-color-teal-6, inlined to keep this file self-contained
+        outline-offset: 1px;
+        border-radius: 2px;
+    }
+}
