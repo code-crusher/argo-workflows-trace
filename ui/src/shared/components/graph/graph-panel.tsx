@@ -40,6 +40,20 @@ interface Props {
 }
 
 const defaultNodeSize = 64;
+const minZoomPercentage = 10; // minimum zoom level, as a percentage of the base node size
+const zoomStepPercentage = 10; // each zoom in/out click changes the node size by this percentage of the base node size
+
+// returns the current zoom level as a whole percentage of the base node size
+export function getZoomPercentage(nodeSize: number, baseNodeSize: number): number {
+    return Math.round((nodeSize / baseNodeSize) * 100);
+}
+
+// changes the node size by the given number of fixed zoom steps, clamped to the minimum zoom level
+export function zoomNodeSize(nodeSize: number, baseNodeSize: number, steps: number): number {
+    const step = (baseNodeSize * zoomStepPercentage) / 100;
+    const minNodeSize = (baseNodeSize * minZoomPercentage) / 100;
+    return Math.max(nodeSize + steps * step, minNodeSize);
+}
 
 const merge = (a: {[key: string]: boolean}, b: {[key: string]: boolean}) => b && Object.assign(Object.assign({}, b), a);
 
@@ -183,10 +197,11 @@ export function GraphPanel(props: Props) {
                     <a onClick={() => setHorizontal(s => !s)} title='Horizontal/vertical layout'>
                         <i className={`fa ${horizontal ? 'fa-long-arrow-alt-right' : 'fa-long-arrow-alt-down'} fa-fw`} />
                     </a>
-                    <a onClick={() => setNodeSize(s => s * 1.2)} title='Zoom in'>
+                    <a onClick={() => setNodeSize(s => zoomNodeSize(s, props.nodeSize || defaultNodeSize, 1))} title='Zoom in'>
                         <i className='fa fa-search-plus fa-fw' />
                     </a>
-                    <a onClick={() => setNodeSize(s => s / 1.2)} title='Zoom out'>
+                    <span className='zoom-percentage'>{getZoomPercentage(nodeSize, props.nodeSize || defaultNodeSize)}%</span>
+                    <a onClick={() => setNodeSize(s => zoomNodeSize(s, props.nodeSize || defaultNodeSize, -1))} title='Zoom out'>
                         <i className='fa fa-search-minus fa-fw' />
                     </a>
                     <a onClick={() => setFast(s => !s)} title='Use faster, but less pretty renderer' className={fast ? 'active' : ''}>
