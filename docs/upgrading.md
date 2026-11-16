@@ -7,6 +7,12 @@ the [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/#summar
 
 ## Upgrading to v4.2
 
+### Template caches no longer store `last-applied-configuration`
+
+The workflow-controller now strips the `kubectl.kubernetes.io/last-applied-configuration` annotation from WorkflowTemplates and ClusterWorkflowTemplates before storing them in its informer caches.
+That annotation — a full copy of the object's spec written by client-side `kubectl apply`, as used by Argo CD and other GitOps tooling — can be ~44% of a cached WorkflowTemplate, and nothing in the controller reads it.
+It is stripped only from the template informers, whose objects the controller reads but never writes back whole; Workflows, Pods and CronWorkflows are unaffected, and objects stored in the cluster keep the annotation.
+
 ### ContainerSet siblings are no longer terminated when one container fails
 
 Previously, as soon as any container in a `containerSet` exited with a non-zero exit code, the controller terminated the whole pod, killing any sibling containers that were still running.

@@ -31,7 +31,10 @@ func NewTolerantWorkflowTemplateInformer(dynamicInterface dynamic.Interface, def
 		}
 	}).ForResource(schema.GroupVersionResource{Group: workflow.Group, Version: workflow.Version, Resource: workflow.WorkflowTemplatePlural})
 	//nolint:errcheck // the error only happens if the informer was already started, and it hasn't been
-	delegate.Informer().SetTransform(informerutil.StripManagedFields)
+	// The controller only reads templates, never writes them back, so stripping the
+	// last-applied-configuration annotation here is safe (it would be destructive on the
+	// workflow informer, whose objects are updated whole from the cache).
+	delegate.Informer().SetTransform(informerutil.ChainTransforms(informerutil.StripManagedFields, informerutil.StripLastAppliedConfiguration))
 	return &tolerantWorkflowTemplateInformer{delegate: delegate}
 }
 
