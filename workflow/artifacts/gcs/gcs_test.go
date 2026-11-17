@@ -49,6 +49,28 @@ func TestIsTransientGCSErr(t *testing.T) {
 	}
 }
 
+func TestContentTypeForKey(t *testing.T) {
+	for _, test := range []struct {
+		key      string
+		expected string
+	}{
+		// checked against Go's built-in mime table, which is platform independent
+		// (an OS-provided mime database may add more, which is fine)
+		{"path/in/bucket/data.json", "application/json"},
+		{"page.html", "text/html; charset=utf-8"},
+		{"style.css", "text/css; charset=utf-8"},
+		{"no-extension", ""},
+		{"trailing/dot.", ""},
+		{"unknown.this-extension-does-not-exist", ""},
+		{"UPPER.JSON", "application/json"}, // mime lookup is case-insensitive
+	} {
+		got := contentTypeForKey(test.key)
+		if got != test.expected {
+			t.Errorf("contentTypeForKey(%q): got %q, want %q", test.key, got, test.expected)
+		}
+	}
+}
+
 func TestNormalizeGCSKey(t *testing.T) {
 	// GCS object names always use "/"; normalizeGCSKey only converts "\" to "/" on
 	// Windows, since "\" is a valid filename character on other OSes.

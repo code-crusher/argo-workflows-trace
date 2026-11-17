@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -308,6 +310,14 @@ func uploadObjects(ctx context.Context, client *storage.Client, bucket, key, pat
 	return nil
 }
 
+// contentTypeForKey returns the MIME type for a GCS object key, based on the
+// file extension. When the extension is unknown (e.g. a key with no extension or a
+// file type Go's built-in mime table doesn't recognise), it returns an empty string
+// so the GCS client falls back to sniffing the content, preserving previous behaviour.
+func contentTypeForKey(key string) string {
+	return mime.TypeByExtension(path.Ext(key))
+}
+
 // upload an object to GCS
 func uploadObject(ctx context.Context, client *storage.Client, bucket, key, localPath string) error {
 	f, err := os.Open(filepath.Clean(localPath))
@@ -321,6 +331,13 @@ func uploadObject(ctx context.Context, client *storage.Client, bucket, key, loca
 		}
 	}()
 	wc := client.Bucket(bucket).Object(key).NewWriter(ctx)
+	// The GCS client sniffs the content type from the first 512 bytes when none is
+	// set, which misdetects text formats with no magic number (e.g. JSON is reported
+	// as "text/plain; charset=utf-8"). Prefer the type implied by the object key's
+	// extension, falling back to content sniffing when it is unknown.
+	if contentType := contentTypeForKey(key); contentType != "" {
+		wc.ContentType = contentType
+	}
 	if _, err = io.Copy(wc, f); err != nil {
 		return fmt.Errorf("io copy: %w", err)
 	}
