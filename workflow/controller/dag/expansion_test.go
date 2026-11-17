@@ -279,6 +279,24 @@ func TestExpandTaskWhenFalseLenient(t *testing.T) {
 	require.ErrorContains(t, err, "withParam value could not be parsed as a JSON list")
 }
 
+// TestExpandTask_KeyPresenceGuard: an expression guarded by a key-presence
+// test expands for every item of a heterogeneous withParam list, including
+// items missing the key it reads (#16002).
+func TestExpandTask_KeyPresenceGuard(t *testing.T) {
+	task := wfv1.DAGTask{
+		Name: "fan",
+		Arguments: wfv1.Arguments{Parameters: []wfv1.Parameter{
+			{Name: "s3_bucket", Value: wfv1.AnyStringPtr(`{{= 'bucket' in item ? item['bucket'] : ''}}`)},
+		}},
+		WithParam: `[{"type": "s3", "bucket": "my-bucket"}, {"type": "nextcloud"}]`,
+	}
+	expanded, err := ExpandTask(testCtx(t), task, nil, templateSubstitutor(t))
+	require.NoError(t, err)
+	require.Len(t, expanded, 2)
+	assert.Equal(t, "my-bucket", expanded[0].Arguments.Parameters[0].Value.String())
+	assert.Equal(t, "", expanded[1].Arguments.Parameters[0].Value.String())
+}
+
 // TestExpandTask_IndexNotAVariable: an item body substitutes {{item}} and
 // {{item.<key>}}, but not {{index}}, which is not a workflow variable (on
 // main it was a resolve error); it is left for a later pass to report.

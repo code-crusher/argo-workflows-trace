@@ -140,6 +140,61 @@ func Test_getIdentifiers(t *testing.T) {
 			expression: "tasks.a.outputs.result ?? 'default'",
 			want:       []string{"tasks"},
 		},
+		{
+			name:       "key-presence test guards the key it checks in the true branch",
+			expression: "'bucket' in item ? item['bucket'] : ''",
+			want:       []string{"item"},
+		},
+		{
+			name:       "key-presence test guards dot notation too",
+			expression: "'bucket' in item ? item.bucket : ''",
+			want:       []string{"item"},
+		},
+		{
+			name:       "negated key-presence test guards the false branch",
+			expression: "'bucket' not in item ? '' : item.bucket",
+			want:       []string{"item"},
+		},
+		{
+			name:       "bang-negated key-presence test guards the false branch",
+			expression: "!('bucket' in item) ? '' : item.bucket",
+			want:       []string{"item"},
+		},
+		{
+			name:       "key-presence test guards only the branch it protects",
+			expression: "'bucket' in item ? item.bucket : item.other",
+			want:       []string{"item", "item.other"},
+		},
+		{
+			name:       "key-presence test on a nested receiver",
+			expression: "'bucket' in item.meta ? item.meta.bucket : ''",
+			want:       []string{"item", "item.meta"},
+		},
+		{
+			name:       "key-presence test guards access below the key",
+			expression: "'bucket' in item ? item.bucket.name : ''",
+			want:       []string{"item"},
+		},
+		{
+			name:       "key-presence test on a different key does not guard",
+			expression: "'bucket' in item ? item.other : ''",
+			want:       []string{"item", "item.other"},
+		},
+		{
+			name:       "&& short-circuits after a key-presence test",
+			expression: "'bucket' in item && item.bucket != ''",
+			want:       []string{"item"},
+		},
+		{
+			name:       "|| short-circuits after a negated key-presence test",
+			expression: "'bucket' not in item || item.bucket == ''",
+			want:       []string{"item"},
+		},
+		{
+			name:       "|| does not short-circuit after a positive key-presence test",
+			expression: "'bucket' in item || item.bucket == ''",
+			want:       []string{"item", "item.bucket"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

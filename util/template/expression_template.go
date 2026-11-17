@@ -155,9 +155,10 @@ func getMemberPath(node *ast.MemberNode) (string, bool) {
 }
 
 // guardVisitor collects the member nodes whose access is guarded by the
-// nil-coalescing (??) or optional-chaining (?.) operators, so they are not
-// reported as strictly-required identifiers. Base identifiers are left
-// untouched so a genuinely-unavailable variable still triggers a requeue.
+// nil-coalescing (??), optional-chaining (?.) or key-presence (`'key' in obj`)
+// operators, so they are not reported as strictly-required identifiers. Base
+// identifiers are left untouched so a genuinely-unavailable variable still
+// triggers a requeue.
 type guardVisitor struct {
 	guarded map[ast.Node]bool
 }
@@ -165,14 +166,108 @@ type guardVisitor struct {
 func (v *guardVisitor) Visit(node *ast.Node) {
 	switch n := (*node).(type) {
 	case *ast.BinaryNode:
-		if n.Operator == "??" {
+		switch n.Operator {
+		case "??":
 			ast.Walk(&n.Left, &memberMarker{guarded: v.guarded})
+		case "&&", "||":
+			// Both short-circuit: `'key' in obj && obj.key == x` only
+			// evaluates obj.key when the key is present, and the right side of
+			// `'key' not in obj || obj.key == x` only when it is absent.
+			whenTrue, whenFalse := keyGuards(n.Left)
+			guards := whenTrue
+			if n.Operator == "||" {
+				guards = whenFalse
+			}
+			v.guardAll(n.Right, guards)
 		}
 	case *ast.MemberNode:
 		if n.Optional {
 			if _, ok := n.Node.(*ast.MemberNode); ok {
 				v.guarded[n.Node] = true
 			}
+		}
+	case *ast.ConditionalNode:
+		// `'key' in obj ? obj.key : fallback` only accesses obj.key when the
+		// key is present, so that access is guarded by the condition; a
+		// negated test guards the other branch instead.
+		whenTrue, whenFalse := keyGuards(n.Cond)
+		v.guardAll(n.Exp1, whenTrue)
+		v.guardAll(n.Exp2, whenFalse)
+	}
+}
+
+func (v *guardVisitor) guardAll(node ast.Node, guards []keyGuard) {
+	for _, g := range guards {
+		ast.Walk(&node, &keyMarker{guarded: v.guarded, receiver: g.receiver, key: g.key})
+	}
+}
+
+// keyGuard is a key-presence test (`'key' in receiver`) whose result guards
+// access to receiver.key.
+type keyGuard struct {
+	receiver string
+	key      string
+}
+
+// keyGuards returns the key-presence tests implied when cond evaluates to true
+// and to false respectively. Only implications that always hold are returned:
+// an `in` test implies presence when true, a negation swaps the two sets, an
+// `&&` implies the union of its operands only when true, and an `||` the union
+// of its operands only when false.
+func keyGuards(cond ast.Node) (whenTrue, whenFalse []keyGuard) {
+	switch n := cond.(type) {
+	case *ast.BinaryNode:
+		switch n.Operator {
+		case "in":
+			key, ok := n.Left.(*ast.StringNode)
+			if !ok {
+				return nil, nil
+			}
+			receiver, ok := nodePath(n.Right)
+			if !ok {
+				return nil, nil
+			}
+			return []keyGuard{{receiver: receiver, key: key.Value}}, nil
+		case "&&":
+			leftTrue, _ := keyGuards(n.Left)
+			rightTrue, _ := keyGuards(n.Right)
+			return append(leftTrue, rightTrue...), nil
+		case "||":
+			_, leftFalse := keyGuards(n.Left)
+			_, rightFalse := keyGuards(n.Right)
+			return nil, append(leftFalse, rightFalse...)
+		}
+	case *ast.UnaryNode:
+		if n.Operator == "not" || n.Operator == "!" {
+			whenTrue, whenFalse := keyGuards(n.Node)
+			return whenFalse, whenTrue
+		}
+	}
+	return nil, nil
+}
+
+func nodePath(node ast.Node) (string, bool) {
+	switch n := node.(type) {
+	case *ast.IdentifierNode:
+		return n.Value, true
+	case *ast.MemberNode:
+		return getMemberPath(n)
+	}
+	return "", false
+}
+
+type keyMarker struct {
+	guarded  map[ast.Node]bool
+	receiver string
+	key      string
+}
+
+func (m *keyMarker) Visit(node *ast.Node) {
+	if n, ok := (*node).(*ast.MemberNode); ok {
+		// Mark accesses to the guarded key itself and anything below it: a
+		// branch reached only when the key is present need not resolve them.
+		if path, ok := getMemberPath(n); ok && (path == m.receiver+"."+m.key || strings.HasPrefix(path, m.receiver+"."+m.key+".")) {
+			m.guarded[*node] = true
 		}
 	}
 }

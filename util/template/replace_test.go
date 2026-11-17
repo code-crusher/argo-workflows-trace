@@ -158,6 +158,68 @@ func Test_ReplaceStrict_NilCoalescing(t *testing.T) {
 	})
 }
 
+// Test_ReplaceStrict_KeyPresence: `'key' in item` guards the key's access in
+// the branch it protects, so a heterogeneous withParam item missing the key
+// falls back instead of failing the strict missing-variable check (#16002).
+func Test_ReplaceStrict_KeyPresence(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+	withKey := map[string]any{"item": map[string]any{"type": "s3", "bucket": "my-bucket"}}
+	withoutKey := map[string]any{"item": map[string]any{"type": "nextcloud"}}
+
+	tests := []struct {
+		name        string
+		expression  string
+		wantWith    string
+		wantWithout string
+	}{
+		{
+			name:        "key-presence test with bracket notation",
+			expression:  `{{= 'bucket' in item ? item['bucket'] : ''}}`,
+			wantWith:    "my-bucket",
+			wantWithout: "",
+		},
+		{
+			name:        "key-presence test with dot notation",
+			expression:  `{{= 'bucket' in item ? item.bucket : ''}}`,
+			wantWith:    "my-bucket",
+			wantWithout: "",
+		},
+		{
+			name:        "negated key-presence test",
+			expression:  `{{= 'bucket' not in item ? '' : item.bucket}}`,
+			wantWith:    "my-bucket",
+			wantWithout: "",
+		},
+		{
+			name:        "key-presence test in a conjunction",
+			expression:  `{{= 'bucket' in item && item.bucket != '' ? item.bucket : 'none'}}`,
+			wantWith:    "my-bucket",
+			wantWithout: "none",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl, err := NewTemplate(tt.expression)
+			require.NoError(t, err)
+
+			out, err := tmpl.ReplaceStrict(ctx, withKey, []string{"item"})
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantWith, out)
+
+			out, err = tmpl.ReplaceStrict(ctx, withoutKey, []string{"item"})
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantWithout, out)
+		})
+	}
+
+	t.Run("an unguarded key access still fails strict check", func(t *testing.T) {
+		tmpl, err := NewTemplate(`{{= item.bucket }}`)
+		require.NoError(t, err)
+		_, err = tmpl.ReplaceStrict(ctx, withoutKey, []string{"item"})
+		require.EqualError(t, err, "failed to evaluate expression: item.bucket is missing")
+	})
+}
+
 func TestNestedReplaceString(t *testing.T) {
 	ctx := logging.TestContext(t.Context())
 	replaceMap := map[string]any{"inputs.parameters.message": "hello world"}

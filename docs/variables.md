@@ -256,6 +256,9 @@ Note: These variables evaluate to a string type. If using advanced expressions, 
 | `item` | Value of the item in a list |
 | `item.<FIELDNAME>` | Field value of the item in a list of maps |
 
+A list may hold heterogeneous items, so `item.<FIELDNAME>` may not exist for every item.
+An expression tag guards such a reference with a key-presence test or `??`, and the guarded reference then resolves to its fallback instead of failing, for example `{{= 'bucket' in item ? item['bucket'] : ''}}`.
+
 ### Metrics
 
 When emitting custom metrics in a `template`, special variables are available that allow self-reference to the current
