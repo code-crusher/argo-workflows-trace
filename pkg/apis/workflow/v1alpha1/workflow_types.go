@@ -785,6 +785,13 @@ type Template struct {
 	// <workflowname>/<nodename> in the key.
 	ArchiveLocation *ArtifactLocation `json:"archiveLocation,omitempty" protobuf:"bytes,20,opt,name=archiveLocation"`
 
+	// Async reports output artifacts as soon as their final locations are known
+	// and continues uploading their bytes in the background, so unrelated
+	// downstream tasks can start before the uploads finish. Tasks that consume a
+	// reported-but-uploading artifact still wait for its upload to complete, and
+	// the workflow is not marked complete until all async uploads finish.
+	Async *bool `json:"async,omitempty" protobuf:"varint,48,opt,name=async"`
+
 	// Optional duration in seconds relative to the StartTime that the pod may be active on a node
 	// before the system actively tries to terminate the pod; value must be positive integer
 	// This field is only applicable to container and script templates.
@@ -1197,6 +1204,12 @@ type Artifact struct {
 
 	// Has this been deleted?
 	Deleted bool `json:"deleted,omitempty" protobuf:"varint,13,opt,name=deleted"`
+
+	// Uploading marks an output artifact whose location has been reported
+	// but whose bytes are still being uploaded in the background by the
+	// wait or supervisor container. Tasks that consume this artifact wait
+	// until the upload completes before they start.
+	Uploading bool `json:"uploading,omitempty" protobuf:"varint,14,opt,name=uploading"`
 }
 
 // GetArtifactGC returns the ArtifactGC that was defined by the artifact. If none was provided, a default value is returned.
@@ -3584,6 +3597,13 @@ func (tmpl *Template) SaveLogsAsArtifact() bool {
 	return tmpl != nil && tmpl.ArchiveLocation.IsArchiveLogs()
 }
 
+// AsyncUploadArtifacts reports whether the template opts into reporting its
+// output artifacts before their bytes have finished uploading. Async uploads
+// still gate workflow completion, pod cleanup and any consumer of the artifact.
+func (tmpl *Template) AsyncUploadArtifacts() bool {
+	return tmpl != nil && tmpl.Async != nil && *tmpl.Async
+}
+
 func (tmpl *Template) GetRetryStrategy() (wait.Backoff, error) {
 	return tmpl.ContainerSet.GetRetryStrategy()
 }
@@ -3792,6 +3812,32 @@ func (out *Outputs) HasResult() bool {
 
 func (out *Outputs) HasArtifacts() bool {
 	return out != nil && len(out.Artifacts) > 0
+}
+
+// HasUploadingArtifacts reports whether any output artifact is still being
+// uploaded in the background: its final location is known, but its bytes
+// have not yet landed. Workflow completion and pod cleanup wait on it.
+func (out *Outputs) HasUploadingArtifacts() bool {
+	if out == nil {
+		return false
+	}
+	for _, a := range out.Artifacts {
+		if a.Uploading {
+			return true
+		}
+	}
+	return false
+}
+
+// UploadingArtifactByName reports whether the named output artifact is
+// still being uploaded in the background. Tasks that consume the artifact
+// wait until this returns false.
+func (out *Outputs) UploadingArtifactByName(name string) bool {
+	if out == nil {
+		return false
+	}
+	art := out.Artifacts.GetArtifactByName(name)
+	return art != nil && art.Uploading
 }
 
 func (out *Outputs) HasParameters() bool {
