@@ -6,12 +6,13 @@ Each migration is only run once. Do not re-order or remove entries.
 
 The table names and cluster name shown here are defaults.
 Your deployment may use different values depending on your configuration.
+The memoization cache table holds memoized step outputs; the migration creating it is only used when the memoization configuration is set.
 
-See [Workflow Archive](workflow-archive.md) and [Synchronization](synchronization.md) for configuration details.
+See [Workflow Archive](workflow-archive.md), [Synchronization](synchronization.md), and [Memoization](memoization.md) for configuration details.
 
 ## Steps
 
-Each migration is numbered as a `Step`. When Argo Workflows runs the automatic migration at controller startup, it records the highest applied step number in a version table (`schema_history` for the archive database,`sync_schema_history` for the sync database) and only runs steps with a higher number on subsequent starts.
+Each migration is numbered as a `Step`. When Argo Workflows runs the automatic migration at controller startup, it records the highest applied step number in a version table (`schema_history` for the archive database, `sync_schema_history` for the sync database, and `memoization_schema_history` for the memoization cache database) and only runs steps with a higher number on subsequent starts.
 Steps may be missing where the step does nothing for the database type.
 This means steps must never be re-ordered or removed — a new schema change is always appended as a new step.
 
@@ -612,6 +613,46 @@ create table if not exists sync_lock (
 
 -- Step 10
 create unique index ilock_name on sync_lock (name);
+
+```
+
+## Memoization Cache Database
+
+### MySQL
+
+```sql
+-- Step 0
+create table if not exists memoization_cache (
+    cache varchar(255) not null,
+    cache_key varchar(255) not null,
+    node_id varchar(255) not null,
+    outputs mediumtext,
+    creation_timestamp timestamp,
+    last_hit_timestamp timestamp,
+    primary key (cache, cache_key)
+);
+
+-- Step 1
+create index imemcache_lasthit on memoization_cache (last_hit_timestamp);
+
+```
+
+### PostgreSQL
+
+```sql
+-- Step 0
+create table if not exists memoization_cache (
+    cache varchar(255) not null,
+    cache_key varchar(255) not null,
+    node_id varchar(255) not null,
+    outputs text,
+    creation_timestamp timestamp,
+    last_hit_timestamp timestamp,
+    primary key (cache, cache_key)
+);
+
+-- Step 1
+create index imemcache_lasthit on memoization_cache (last_hit_timestamp);
 
 ```
 

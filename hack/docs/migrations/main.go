@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	persistsqldb "github.com/argoproj/argo-workflows/v4/persist/sqldb"
+	memoizedb "github.com/argoproj/argo-workflows/v4/util/memoize/db"
 	"github.com/argoproj/argo-workflows/v4/util/sqldb"
 	syncdb "github.com/argoproj/argo-workflows/v4/util/sync/db"
 )
@@ -35,6 +36,14 @@ var migrationSections = []migrationSection{
 			})
 		},
 	},
+	{
+		title: "Memoization Cache Database",
+		changes: func(dbType sqldb.DBType) []sqldb.Change {
+			return memoizedb.MigrateChanges(&memoizedb.Config{
+				TableName: "memoization_cache",
+			}, dbType)
+		},
+	},
 }
 
 const docHeader = `# Database Migrations
@@ -45,12 +54,13 @@ Each migration is only run once. Do not re-order or remove entries.
 
 The table names and cluster name shown here are defaults.
 Your deployment may use different values depending on your configuration.
+The memoization cache table holds memoized step outputs; the migration creating it is only used when the memoization configuration is set.
 
-See [Workflow Archive](workflow-archive.md) and [Synchronization](synchronization.md) for configuration details.
+See [Workflow Archive](workflow-archive.md), [Synchronization](synchronization.md), and [Memoization](memoization.md) for configuration details.
 
 ## Steps
 
-Each migration is numbered as a ` + "`Step`" + `. When Argo Workflows runs the automatic migration at controller startup, it records the highest applied step number in a version table (` + "`schema_history`" + ` for the archive database,` + "`sync_schema_history`" + ` for the sync database) and only runs steps with a higher number on subsequent starts.
+Each migration is numbered as a ` + "`Step`" + `. When Argo Workflows runs the automatic migration at controller startup, it records the highest applied step number in a version table (` + "`schema_history`" + ` for the archive database, ` + "`sync_schema_history`" + ` for the sync database, and ` + "`memoization_schema_history`" + ` for the memoization cache database) and only runs steps with a higher number on subsequent starts.
 Steps may be missing where the step does nothing for the database type.
 This means steps must never be re-ordered or removed — a new schema change is always appended as a new step.
 

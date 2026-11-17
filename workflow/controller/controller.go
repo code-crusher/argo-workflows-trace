@@ -50,6 +50,7 @@ import (
 	informerutil "github.com/argoproj/argo-workflows/v4/util/informer"
 	rbacutil "github.com/argoproj/argo-workflows/v4/util/rbac"
 	"github.com/argoproj/argo-workflows/v4/util/retry"
+	memoizedb "github.com/argoproj/argo-workflows/v4/util/memoize/db"
 	utilsqldb "github.com/argoproj/argo-workflows/v4/util/sqldb"
 	"github.com/argoproj/argo-workflows/v4/util/telemetry"
 	waitutil "github.com/argoproj/argo-workflows/v4/util/wait"
@@ -187,6 +188,7 @@ type WorkflowController struct {
 	eventRecorderManager       events.EventRecorderManager
 	archiveLabelSelector       labels.Selector
 	cacheFactory               controllercache.Factory
+	memoizationInfo            *memoizedb.Info
 	wfTaskSetInformer          wfextvv1alpha1.WorkflowTaskSetInformer
 	artGCTaskInformer          wfextvv1alpha1.WorkflowArtifactGCTaskInformer
 	taskResultInformer         cache.SharedIndexInformer
@@ -252,7 +254,6 @@ func NewWorkflowController(ctx context.Context, restConfig *rest.Config, kubecli
 		cliExecutorLogFormat:       executorLogFormat,
 		configController:           config.NewController(namespace, configMap, kubeclientset),
 		workflowKeyLock:            syncpkg.NewKeyLock(),
-		cacheFactory:               controllercache.NewCacheFactory(kubeclientset, namespace),
 		eventRecorderManager:       events.NewEventRecorderManager(kubeclientset),
 		progressPatchTickDuration:  env.LookupEnvDurationOr(ctx, common.EnvVarProgressPatchTickDuration, 1*time.Minute),
 		progressFileTickDuration:   env.LookupEnvDurationOr(ctx, common.EnvVarProgressFileTickDuration, 3*time.Second),
@@ -284,6 +285,7 @@ func NewWorkflowController(ctx context.Context, restConfig *rest.Config, kubecli
 	wfc.enableWorkflowLevelExecutorPlugins = workflowLevelExecutorPlugins
 
 	wfc.UpdateConfig(ctx)
+	wfc.cacheFactory = controllercache.NewCacheFactory(kubeclientset, namespace, wfc.memoizationInfo)
 	wfc.maxStackDepth = wfc.getMaxStackDepth()
 	wfc.metrics, err = metrics.New(ctx,
 		`workflows-controller`,

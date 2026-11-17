@@ -58,7 +58,6 @@ import (
 	varkeys "github.com/argoproj/argo-workflows/v4/util/variables/keys"
 	waitutil "github.com/argoproj/argo-workflows/v4/util/wait"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
-	controllercache "github.com/argoproj/argo-workflows/v4/workflow/controller/cache"
 	"github.com/argoproj/argo-workflows/v4/workflow/controller/dag"
 	"github.com/argoproj/argo-workflows/v4/workflow/controller/estimation"
 	"github.com/argoproj/argo-workflows/v4/workflow/controller/indexes"
@@ -1290,7 +1289,7 @@ func (woc *wfOperationCtx) podReconciliation(ctx context.Context) (bool, error) 
 				}
 				if newState.MemoizationStatus != nil {
 					if newState.Succeeded() {
-						c := woc.controller.cacheFactory.GetCache(controllercache.ConfigMapCache, newState.MemoizationStatus.CacheName)
+						c := woc.controller.cacheFactory.GetCache(newState.MemoizationStatus.CacheName)
 						err := c.Save(ctx, newState.MemoizationStatus.Key, newState.ID, newState.Outputs)
 						if err != nil {
 							woc.log.WithFields(logging.Fields{"nodeID": newState.ID}).WithError(err).Error(ctx, "Failed to save node outputs to cache")

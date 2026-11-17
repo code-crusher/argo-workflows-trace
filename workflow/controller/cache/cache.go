@@ -10,6 +10,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	wfv1 "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
+	memoizedb "github.com/argoproj/argo-workflows/v4/util/memoize/db"
 )
 
 var cacheKeyRegex = regexp.MustCompile("^[a-zA-Z0-9][-a-zA-Z0-9]*$")
@@ -49,56 +50,55 @@ func (e *Entry) GetOutputsWithMaxAge(maxAge time.Duration) (*wfv1.Outputs, bool)
 }
 
 type cacheFactory struct {
-	caches     map[string]MemoizationCache
-	kubeclient kubernetes.Interface
-	namespace  string
-	lock       sync.RWMutex
+	caches      map[string]MemoizationCache
+	kubeclient  kubernetes.Interface
+	namespace   string
+	memoization *memoizedb.Info
+	lock        sync.RWMutex
 }
 
 type Factory interface {
-	GetCache(ct Type, name string) MemoizationCache
+	// GetCache returns the memoization cache for the given name. If a database is
+	// configured for memoization the name partitions the database table, otherwise it is
+	// the name of a config map. Returns nil if no cache could be created.
+	GetCache(name string) MemoizationCache
 }
 
-func NewCacheFactory(ki kubernetes.Interface, ns string) Factory {
+// NewCacheFactory creates a cache factory. If info is non-nil (and backed by a live
+// database connection), memoization entries are stored in the database; otherwise the
+// legacy config map cache is used.
+func NewCacheFactory(ki kubernetes.Interface, ns string, info *memoizedb.Info) Factory {
 	return &cacheFactory{
-		make(map[string]MemoizationCache),
-		ki,
-		ns,
-		sync.RWMutex{},
+		caches:      make(map[string]MemoizationCache),
+		kubeclient:  ki,
+		namespace:   ns,
+		memoization: info,
+		lock:        sync.RWMutex{},
 	}
 }
-
-type Type string
-
-const (
-	// Only config maps are currently supported for caching
-	ConfigMapCache Type = "ConfigMapCache"
-)
 
 // Returns a cache if it exists and creates it otherwise
-func (cf *cacheFactory) GetCache(ct Type, name string) MemoizationCache {
+func (cf *cacheFactory) GetCache(name string) MemoizationCache {
 	cf.lock.RLock()
-
-	idx := string(ct) + "." + name
-	if c := cf.caches[idx]; c != nil {
-		cf.lock.RUnlock()
+	c, ok := cf.caches[name]
+	cf.lock.RUnlock()
+	if ok {
 		return c
 	}
-	cf.lock.RUnlock()
 
 	cf.lock.Lock()
 	defer cf.lock.Unlock()
 
-	if c := cf.caches[idx]; c != nil {
+	if c, ok := cf.caches[name]; ok {
 		return c
 	}
 
-	switch ct {
-	case ConfigMapCache:
-		c := NewConfigMapCache(cf.namespace, cf.kubeclient, name)
-		cf.caches[idx] = c
+	if cf.memoization != nil && cf.memoization.SessionProxy != nil {
+		c = NewSQLCache(cf.memoization, name)
+		cf.caches[name] = c
 		return c
-	default:
-		return nil
 	}
+	c = NewConfigMapCache(cf.namespace, cf.kubeclient, name)
+	cf.caches[name] = c
+	return c
 }

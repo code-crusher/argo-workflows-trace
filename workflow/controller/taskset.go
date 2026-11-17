@@ -18,7 +18,6 @@ import (
 	argokubeerr "github.com/argoproj/argo-workflows/v4/util/kube/errors"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
-	controllercache "github.com/argoproj/argo-workflows/v4/workflow/controller/cache"
 )
 
 // onWorkflowTaskSetUpdate keeps routine updates rate-limited, but optionally
@@ -229,7 +228,7 @@ func (woc *wfOperationCtx) reconcileTaskSet(ctx context.Context) error {
 			tmpl := workflowTaskSet.Spec.Tasks[nodeID]
 			woc.handleNodeFulfilled(ctx, node, &tmpl)
 			if node.MemoizationStatus != nil && node.Succeeded() {
-				c := woc.controller.cacheFactory.GetCache(controllercache.ConfigMapCache, node.MemoizationStatus.CacheName)
+				c := woc.controller.cacheFactory.GetCache(node.MemoizationStatus.CacheName)
 				err := c.Save(ctx, node.MemoizationStatus.Key, node.ID, node.Outputs)
 				if err != nil {
 					woc.log.WithFields(logging.Fields{"nodeID": node.ID}).WithError(err).Error(ctx, "Failed to save node outputs to cache")

@@ -50,3 +50,58 @@ spec:
     * Delete the existing `ConfigMap` cache or switch to use a different cache.
     * Reduce the size of the output parameters for the nodes that are being memoized.
     * Split your cache into different memoization keys and cache names so that each cache entry is small.
+
+## Database cache
+
+By default the cache is stored in ConfigMaps.
+For large-scale use, you can instead store memoization entries in a PostgreSQL or MySQL database.
+The database backend removes the 1MB ConfigMap size limit and avoids creating many ConfigMap objects.
+ConfigMaps remain the default; the database backend is opt-in.
+
+The cache still uses the `configMap` name from the template's `memoize` block to identify which cache an entry belongs to.
+With the database backend configured, that name becomes a partition key in the cache table instead of a ConfigMap name.
+No changes to your templates are needed.
+
+To configure the database, set the `memoization` section in the `workflow-controller-configmap` ConfigMap.
+The database can be PostgreSQL, MySQL, or MariaDB.
+See [the `MemoizationConfig` section](workflow-controller-configmap.md#memoizationconfig) for all options.
+
+The `workflow-controller-configmap` ConfigMap can carry each section as its own key, so you can add a `memoization` key next to the existing keys:
+
+```yaml title="workflow-controller-configmap.yaml"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-controller-configmap
+data:
+  memoization: |
+    postgresql:
+      host: postgres
+      port: 5432
+      database: argo
+      userNameSecret:
+        name: argo-postgres-config
+        key: username
+      passwordSecret:
+        name: argo-postgres-config
+        key: password
+    cacheTTL: 720h
+```
+
+The controller creates and migrates the `memoization_cache` table automatically at startup.
+Set `skipMigration: true` if you manage the schema yourself, and `tableName` to use a different table name.
+For the list of SQL statements applied during migration, see [Database Migrations](database-migrations.md).
+
+`cacheTTL` sets the maximum age of a cache entry.
+Entries older than `cacheTTL` are ignored when the controller reads the cache, and are deleted when garbage collection runs.
+If `cacheTTL` is not set, entries do not expire based on age.
+In both cases, entries that have not been hit for the duration configured by the `CACHE_GC_AFTER_NOT_HIT_DURATION` environment variable (default 30 seconds) are deleted when garbage collection runs, and garbage collection itself runs every `CACHE_GC_PERIOD`.
+Set `CACHE_GC_PERIOD` to a non-zero duration to enable garbage collection; it is disabled by default.
+
+If the controller cannot connect to the database or the migration fails, memoization falls back to the ConfigMap cache and the error is logged.
+
+You can delete entries manually with SQL, for example:
+
+```sql
+DELETE FROM memoization_cache WHERE cache = 'print-message-cache';
+```

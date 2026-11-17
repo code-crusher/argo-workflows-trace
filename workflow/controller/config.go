@@ -15,7 +15,7 @@ import (
 	persist "github.com/argoproj/argo-workflows/v4/persist/sqldb"
 	"github.com/argoproj/argo-workflows/v4/util/instanceid"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
-
+	memoizedb "github.com/argoproj/argo-workflows/v4/util/memoize/db"
 	"github.com/argoproj/argo-workflows/v4/util/sqldb"
 	"github.com/argoproj/argo-workflows/v4/workflow/artifactrepositories"
 	"github.com/argoproj/argo-workflows/v4/workflow/controller/indexes"
@@ -91,6 +91,26 @@ func (wfc *WorkflowController) updateConfig(ctx context.Context) error {
 	}
 
 	wfc.hydrator = hydrator.New(wfc.offloadNodeStatusRepo)
+	if wfc.memoizationInfo == nil {
+		if memoization := wfc.Config.Memoization; memoization != nil {
+			sessionProxy := memoizedb.SessionProxyFromConfig(ctx, wfc.kubeclientset, wfc.namespace, memoization)
+			if sessionProxy != nil {
+				info := &memoizedb.Info{
+					Config:       memoizedb.ConfigFromConfig(memoization, ""),
+					SessionProxy: sessionProxy,
+				}
+				info.Migrate(ctx)
+				if info.SessionProxy == nil {
+					logger.Error(ctx, "Memoization cache database migration failed; falling back to config map cache")
+				} else {
+					wfc.memoizationInfo = info
+					logger.Info(ctx, "Memoization cache configured to use database")
+				}
+			} else {
+				logger.Error(ctx, "Memoization cache database could not be reached; falling back to config map cache")
+			}
+		}
+	}
 	wfc.updateEstimatorFactory(ctx)
 	wfc.rateLimiter = wfc.newRateLimiter()
 	wfc.maxStackDepth = wfc.getMaxStackDepth()

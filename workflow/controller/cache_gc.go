@@ -19,6 +19,19 @@ import (
 // syncAllCacheForGC syncs all cache for GC
 func (wfc *WorkflowController) syncAllCacheForGC(ctx context.Context) {
 	logger := logging.RequireLoggerFromContext(ctx)
+	if wfc.memoizationInfo != nil {
+		notHitSince := time.Now().Add(-wfc.gcAfterNotHitDuration)
+		var createdBefore time.Time
+		if ttl := wfc.memoizationInfo.Config.CacheTTL; ttl > 0 {
+			createdBefore = time.Now().Add(-ttl)
+		}
+		deleted, err := controllercache.DeleteOlderThan(ctx, wfc.memoizationInfo, notHitSince, createdBefore)
+		if err != nil {
+			logger.WithError(err).Error(ctx, "Unable to garbage collect memoization cache database entries")
+		} else if deleted > 0 {
+			logger.WithField("deleted", deleted).Info(ctx, "Deleted memoization cache entries that have not been hit recently")
+		}
+	}
 	configMaps, err := wfc.typedConfigMapInformer.GetIndexer().ByIndex(indexes.ConfigMapLabelsIndex, common.LabelValueTypeConfigMapCache)
 	if err != nil {
 		logger.WithError(err).Error(ctx, "Failed to get configmaps from informer")
