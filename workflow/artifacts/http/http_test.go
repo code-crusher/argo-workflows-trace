@@ -94,6 +94,91 @@ func TestArtifactoryArtifactDriver_Load(t *testing.T) {
 	})
 }
 
+func TestLoadWithBearerToken(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+
+	t.Run("sends the bearer token from auth", func(t *testing.T) {
+		var authorization []string
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authorization = r.Header["Authorization"]
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer svr.Close()
+
+		driver := &ArtifactDriver{Client: svr.Client(), Token: "my-token"}
+		err := driver.Load(ctx, &wfv1.Artifact{
+			ArtifactLocation: wfv1.ArtifactLocation{
+				HTTP: &wfv1.HTTPArtifact{URL: svr.URL},
+			},
+		}, filepath.Join(t.TempDir(), "artifact"))
+		require.NoError(t, err)
+		assert.Equal(t, []string{"Bearer my-token"}, authorization)
+	})
+
+	t.Run("sends no Authorization header without a token", func(t *testing.T) {
+		var authorization []string
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authorization = r.Header["Authorization"]
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer svr.Close()
+
+		driver := &ArtifactDriver{Client: svr.Client()}
+		err := driver.Load(ctx, &wfv1.Artifact{
+			ArtifactLocation: wfv1.ArtifactLocation{
+				HTTP: &wfv1.HTTPArtifact{URL: svr.URL},
+			},
+		}, filepath.Join(t.TempDir(), "artifact"))
+		require.NoError(t, err)
+		assert.Empty(t, authorization)
+	})
+
+	t.Run("overrides a header with the same name", func(t *testing.T) {
+		var authorization []string
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authorization = r.Header["Authorization"]
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer svr.Close()
+
+		driver := &ArtifactDriver{Client: svr.Client(), Token: "my-token"}
+		err := driver.Load(ctx, &wfv1.Artifact{
+			ArtifactLocation: wfv1.ArtifactLocation{
+				HTTP: &wfv1.HTTPArtifact{
+					URL: svr.URL,
+					Headers: []wfv1.Header{
+						{Name: "Authorization", Value: "Bearer old-token"},
+					},
+				},
+			},
+		}, filepath.Join(t.TempDir(), "artifact"))
+		require.NoError(t, err)
+		assert.Equal(t, []string{"Bearer my-token"}, authorization)
+	})
+}
+
+func TestSaveWithBearerToken(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+
+	t.Run("sends the bearer token from auth", func(t *testing.T) {
+		var authorization []string
+		svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authorization = r.Header["Authorization"]
+			w.WriteHeader(http.StatusCreated)
+		}))
+		defer svr.Close()
+
+		driver := &ArtifactDriver{Client: svr.Client(), Token: "my-token"}
+		err := driver.SaveStream(ctx, strings.NewReader("content"), &wfv1.Artifact{
+			ArtifactLocation: wfv1.ArtifactLocation{
+				HTTP: &wfv1.HTTPArtifact{URL: svr.URL},
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"Bearer my-token"}, authorization)
+	})
+}
+
 func TestSaveHTTPArtifactRedirect(t *testing.T) {
 	tempDir := t.TempDir()
 

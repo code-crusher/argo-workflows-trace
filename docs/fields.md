@@ -5245,6 +5245,7 @@ _No description available_
 | Field Name | Field Type | Description   |
 |:----------:|:----------:|---------------|
 |`basicAuth`|[`BasicAuth`](#basicauth)|_No description available_|
+|`bearer`|[`BearerAuth`](#bearerauth)|_No description available_|
 |`clientCert`|[`ClientCertAuth`](#clientcertauth)|_No description available_|
 |`oauth2`|[`OAuth2Auth`](#oauth2auth)|_No description available_|
 
@@ -5432,6 +5433,15 @@ BasicAuth describes the secret selectors required for basic authentication
 |:----------:|:----------:|---------------|
 |`passwordSecret`|[`SecretKeySelector`](#secretkeyselector)|PasswordSecret is the secret selector to the repository password|
 |`usernameSecret`|[`SecretKeySelector`](#secretkeyselector)|UsernameSecret is the secret selector to the repository username|
+
+## BearerAuth
+
+BearerAuth describes the secret selector required for bearer token authentication
+
+### Fields
+| Field Name | Field Type | Description   |
+|:----------:|:----------:|---------------|
+|`tokenSecret`|[`SecretKeySelector`](#secretkeyselector)|TokenSecret is the secret selector to the authentication bearer token|
 
 ## ClientCertAuth
 

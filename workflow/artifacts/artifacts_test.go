@@ -11,6 +11,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 
 	wfv1 "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
+	"github.com/argoproj/argo-workflows/v4/workflow/artifacts/http"
 	"github.com/argoproj/argo-workflows/v4/workflow/artifacts/s3"
 )
 
@@ -85,4 +86,40 @@ func TestNewDriverS3AddressingStyle(t *testing.T) {
 			assert.Equal(t, style, artDriver.AddressingStyle)
 		})
 	}
+}
+
+func TestNewDriverHTTP(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+
+	t.Run("BearerTokenSecret", func(t *testing.T) {
+		art := &wfv1.Artifact{
+			ArtifactLocation: wfv1.ArtifactLocation{HTTP: &wfv1.HTTPArtifact{
+				URL: "https://example.com/artifact",
+				Auth: &wfv1.HTTPAuth{
+					Bearer: wfv1.BearerAuth{
+						TokenSecret: &apiv1.SecretKeySelector{
+							LocalObjectReference: apiv1.LocalObjectReference{Name: "bearer-token"},
+							Key:                  "token",
+						},
+					},
+				},
+			}},
+		}
+		got, err := newDriver(ctx, art, &mockResourceInterface{})
+		require.NoError(t, err)
+		artDriver := got.(*http.ArtifactDriver)
+		assert.Equal(t, "token-secret", artDriver.Token)
+	})
+
+	t.Run("NoBearerTokenSecret", func(t *testing.T) {
+		art := &wfv1.Artifact{
+			ArtifactLocation: wfv1.ArtifactLocation{HTTP: &wfv1.HTTPArtifact{
+				URL: "https://example.com/artifact",
+			}},
+		}
+		got, err := newDriver(ctx, art, &mockResourceInterface{})
+		require.NoError(t, err)
+		artDriver := got.(*http.ArtifactDriver)
+		assert.Empty(t, artDriver.Token)
+	})
 }

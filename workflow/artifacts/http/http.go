@@ -17,6 +17,7 @@ import (
 type ArtifactDriver struct {
 	Username string
 	Password string
+	Token    string
 	Client   *http.Client
 }
 
@@ -42,6 +43,9 @@ func (h *ArtifactDriver) retrieveContent(ctx context.Context, inputArtifact *wfv
 		}
 		for _, h := range inputArtifact.HTTP.Headers {
 			req.Header.Add(h.Name, h.Value)
+		}
+		if h.Token != "" {
+			req.Header.Set("Authorization", "Bearer "+h.Token)
 		}
 		if h.Username != "" && h.Password != "" {
 			req.SetBasicAuth(h.Username, h.Password)
@@ -117,6 +121,9 @@ func (h *ArtifactDriver) buildPutRequest(ctx context.Context, body io.Reader, ou
 		}
 		for _, header := range outputArtifact.HTTP.Headers {
 			req.Header.Add(header.Name, header.Value)
+		}
+		if h.Token != "" {
+			req.Header.Set("Authorization", "Bearer "+h.Token)
 		}
 		if h.Username != "" && h.Password != "" {
 			req.SetBasicAuth(h.Username, h.Password)

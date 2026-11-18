@@ -40,6 +40,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.AzureBlobContainer":            schema_pkg_apis_workflow_v1alpha1_AzureBlobContainer(ref),
 		"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.Backoff":                       schema_pkg_apis_workflow_v1alpha1_Backoff(ref),
 		"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.BasicAuth":                     schema_pkg_apis_workflow_v1alpha1_BasicAuth(ref),
+		"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.BearerAuth":                    schema_pkg_apis_workflow_v1alpha1_BearerAuth(ref),
 		"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.Cache":                         schema_pkg_apis_workflow_v1alpha1_Cache(ref),
 		"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.ClientCertAuth":                schema_pkg_apis_workflow_v1alpha1_ClientCertAuth(ref),
 		"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.ClusterWorkflowTemplate":       schema_pkg_apis_workflow_v1alpha1_ClusterWorkflowTemplate(ref),
@@ -1480,6 +1481,27 @@ func schema_pkg_apis_workflow_v1alpha1_BasicAuth(ref common.ReferenceCallback) c
 					"passwordSecret": {
 						SchemaProps: spec.SchemaProps{
 							Description: "PasswordSecret is the secret selector to the repository password",
+							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/api/core/v1.SecretKeySelector"},
+	}
+}
+
+func schema_pkg_apis_workflow_v1alpha1_BearerAuth(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "BearerAuth describes the secret selector required for bearer token authentication",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"tokenSecret": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TokenSecret is the secret selector to the authentication bearer token",
 							Ref:         ref("k8s.io/api/core/v1.SecretKeySelector"),
 						},
 					},
@@ -3538,11 +3560,17 @@ func schema_pkg_apis_workflow_v1alpha1_HTTPAuth(ref common.ReferenceCallback) co
 							Ref:     ref("github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.BasicAuth"),
 						},
 					},
+					"bearer": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.BearerAuth"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.BasicAuth", "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.ClientCertAuth", "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.OAuth2Auth"},
+			"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.BasicAuth", "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.BearerAuth", "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.ClientCertAuth", "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1.OAuth2Auth"},
 	}
 }
 

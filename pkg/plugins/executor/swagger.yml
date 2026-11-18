@@ -407,6 +407,12 @@ definitions:
             usernameSecret:
                 $ref: '#/definitions/SecretKeySelector'
         type: object
+    BearerAuth:
+        description: BearerAuth describes the secret selector required for bearer token authentication
+        properties:
+            tokenSecret:
+                $ref: '#/definitions/SecretKeySelector'
+        type: object
     CSIVolumeSource:
         description: Represents a source location of a volume to mount, managed by an external CSI driver
         properties:
@@ -1968,6 +1974,8 @@ definitions:
         properties:
             basicAuth:
                 $ref: '#/definitions/BasicAuth'
+            bearer:
+                $ref: '#/definitions/BearerAuth'
             clientCert:
                 $ref: '#/definitions/ClientCertAuth'
             oauth2:

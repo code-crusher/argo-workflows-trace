@@ -3189,6 +3189,12 @@ type ClientCertAuth struct {
 	ClientKeySecret  *apiv1.SecretKeySelector `json:"clientKeySecret,omitempty" protobuf:"bytes,2,opt,name=clientKeySecret"`
 }
 
+// BearerAuth describes the secret selector required for bearer token authentication
+type BearerAuth struct {
+	// TokenSecret is the secret selector to the authentication bearer token
+	TokenSecret *apiv1.SecretKeySelector `json:"tokenSecret,omitempty" protobuf:"bytes,1,opt,name=tokenSecret"`
+}
+
 // OAuth2Auth holds all information for client authentication via OAuth2 tokens
 type OAuth2Auth struct {
 	ClientIDSecret     *apiv1.SecretKeySelector `json:"clientIDSecret,omitempty" protobuf:"bytes,1,opt,name=clientIDSecret"`
@@ -3211,6 +3217,7 @@ type HTTPAuth struct {
 	ClientCert ClientCertAuth `json:"clientCert,omitempty" protobuf:"bytes,1,opt,name=clientCert"`
 	OAuth2     OAuth2Auth     `json:"oauth2,omitempty" protobuf:"bytes,2,opt,name=oauth2"`
 	BasicAuth  BasicAuth      `json:"basicAuth,omitempty" protobuf:"bytes,3,opt,name=basicAuth"`
+	Bearer     BearerAuth     `json:"bearer,omitempty" protobuf:"bytes,4,opt,name=bearer"`
 }
 
 // HTTPArtifact allows a file served on HTTP to be placed as an input artifact in a container

@@ -506,6 +506,24 @@ of a single workflow step, which the executor will use as a default location to 
 
 
 
+### <span id="bearer-auth"></span> BearerAuth
+
+
+> BearerAuth describes the secret selector required for bearer token authentication
+  
+
+
+
+
+
+**Properties**
+
+| Name | Type | Go type | Required | Default | Description | Example |
+|------|------|---------|:--------:| ------- |-------------|---------|
+| tokenSecret | [SecretKeySelector](#secret-key-selector)| `SecretKeySelector` |  | |  |  |
+
+
+
 ### <span id="c-s-i-volume-source"></span> CSIVolumeSource
 
 
@@ -1701,6 +1719,7 @@ into the Pod's container.
 | Name | Type | Go type | Required | Default | Description | Example |
 |------|------|---------|:--------:| ------- |-------------|---------|
 | basicAuth | [BasicAuth](#basic-auth)| `BasicAuth` |  | |  |  |
+| bearer | [BearerAuth](#bearer-auth)| `BearerAuth` |  | |  |  |
 | clientCert | [ClientCertAuth](#client-cert-auth)| `ClientCertAuth` |  | |  |  |
 | oauth2 | [OAuth2Auth](#o-auth2-auth)| `OAuth2Auth` |  | |  |  |
 

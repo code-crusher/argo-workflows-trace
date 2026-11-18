@@ -1504,6 +1504,36 @@ spec:
                                       type: object
                                       x-kubernetes-map-type: atomic
                                   type: object
+                                bearer:
+                                  description: BearerAuth describes the secret selector
+                                    required for bearer token authentication
+                                  properties:
+                                    tokenSecret:
+                                      description: TokenSecret is the secret selector
+                                        to the authentication bearer token
+                                      properties:
+                                        key:
+                                          description: The key of the secret to select
+                                            from.  Must be a valid secret key.
+                                          type: string
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                        optional:
+                                          description: Specify whether the Secret
+                                            or its key must be defined
+                                          type: boolean
+                                      required:
+                                      - key
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                  type: object
                                 clientCert:
                                   description: ClientCertAuth holds necessary information
                                     for client authentication via certificates
@@ -4442,6 +4472,38 @@ spec:
                                             type: object
                                             x-kubernetes-map-type: atomic
                                         type: object
+                                      bearer:
+                                        description: BearerAuth describes the secret
+                                          selector required for bearer token authentication
+                                        properties:
+                                          tokenSecret:
+                                            description: TokenSecret is the secret
+                                              selector to the authentication bearer
+                                              token
+                                            properties:
+                                              key:
+                                                description: The key of the secret
+                                                  to select from.  Must be a valid
+                                                  secret key.
+                                                type: string
+                                              name:
+                                                default: ""
+                                                description: |-
+                                                  Name of the referent.
+                                                  This field is effectively required, but due to backwards compatibility is
+                                                  allowed to be empty. Instances of this type with an empty value here are
+                                                  almost certainly wrong.
+                                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                type: string
+                                              optional:
+                                                description: Specify whether the Secret
+                                                  or its key must be defined
+                                                type: boolean
+                                            required:
+                                            - key
+                                            type: object
+                                            x-kubernetes-map-type: atomic
+                                        type: object
                                       clientCert:
                                         description: ClientCertAuth holds necessary
                                           information for client authentication via
@@ -6726,6 +6788,22 @@ spec:
                                     type: object
                                     x-kubernetes-map-type: atomic
                                 type: object
+                              bearer:
+                                properties:
+                                  tokenSecret:
+                                    properties:
+                                      key:
+                                        type: string
+                                      name:
+                                        default: ""
+                                        type: string
+                                      optional:
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                type: object
                               clientCert:
                                 properties:
                                   clientCertSecret:
@@ -8805,6 +8883,22 @@ spec:
                                                     type: object
                                                     x-kubernetes-map-type: atomic
                                                 type: object
+                                              bearer:
+                                                properties:
+                                                  tokenSecret:
+                                                    properties:
+                                                      key:
+                                                        type: string
+                                                      name:
+                                                        default: ""
+                                                        type: string
+                                                      optional:
+                                                        type: boolean
+                                                    required:
+                                                    - key
+                                                    type: object
+                                                    x-kubernetes-map-type: atomic
+                                                type: object
                                               clientCert:
                                                 properties:
                                                   clientCertSecret:
@@ -9468,6 +9562,22 @@ spec:
                                                           type: object
                                                           x-kubernetes-map-type: atomic
                                                         usernameSecret:
+                                                          properties:
+                                                            key:
+                                                              type: string
+                                                            name:
+                                                              default: ""
+                                                              type: string
+                                                            optional:
+                                                              type: boolean
+                                                          required:
+                                                          - key
+                                                          type: object
+                                                          x-kubernetes-map-type: atomic
+                                                      type: object
+                                                    bearer:
+                                                      properties:
+                                                        tokenSecret:
                                                           properties:
                                                             key:
                                                               type: string
@@ -10212,6 +10322,22 @@ spec:
                                             type: object
                                             x-kubernetes-map-type: atomic
                                           usernameSecret:
+                                            properties:
+                                              key:
+                                                type: string
+                                              name:
+                                                default: ""
+                                                type: string
+                                              optional:
+                                                type: boolean
+                                            required:
+                                            - key
+                                            type: object
+                                            x-kubernetes-map-type: atomic
+                                        type: object
+                                      bearer:
+                                        properties:
+                                          tokenSecret:
                                             properties:
                                               key:
                                                 type: string
@@ -11637,6 +11763,22 @@ spec:
                                           type: object
                                           x-kubernetes-map-type: atomic
                                       type: object
+                                    bearer:
+                                      properties:
+                                        tokenSecret:
+                                          properties:
+                                            key:
+                                              type: string
+                                            name:
+                                              default: ""
+                                              type: string
+                                            optional:
+                                              type: boolean
+                                          required:
+                                          - key
+                                          type: object
+                                          x-kubernetes-map-type: atomic
+                                      type: object
                                     clientCert:
                                       properties:
                                         clientCertSecret:
@@ -12417,6 +12559,22 @@ spec:
                                           type: object
                                           x-kubernetes-map-type: atomic
                                       type: object
+                                    bearer:
+                                      properties:
+                                        tokenSecret:
+                                          properties:
+                                            key:
+                                              type: string
+                                            name:
+                                              default: ""
+                                              type: string
+                                            optional:
+                                              type: boolean
+                                          required:
+                                          - key
+                                          type: object
+                                          x-kubernetes-map-type: atomic
+                                      type: object
                                     clientCert:
                                       properties:
                                         clientCertSecret:
@@ -13131,6 +13289,22 @@ spec:
                                             type: object
                                             x-kubernetes-map-type: atomic
                                           usernameSecret:
+                                            properties:
+                                              key:
+                                                type: string
+                                              name:
+                                                default: ""
+                                                type: string
+                                              optional:
+                                                type: boolean
+                                            required:
+                                            - key
+                                            type: object
+                                            x-kubernetes-map-type: atomic
+                                        type: object
+                                      bearer:
+                                        properties:
+                                          tokenSecret:
                                             properties:
                                               key:
                                                 type: string
@@ -15347,6 +15521,22 @@ spec:
                                                   type: object
                                                   x-kubernetes-map-type: atomic
                                               type: object
+                                            bearer:
+                                              properties:
+                                                tokenSecret:
+                                                  properties:
+                                                    key:
+                                                      type: string
+                                                    name:
+                                                      default: ""
+                                                      type: string
+                                                    optional:
+                                                      type: boolean
+                                                  required:
+                                                  - key
+                                                  type: object
+                                                  x-kubernetes-map-type: atomic
+                                              type: object
                                             clientCert:
                                               properties:
                                                 clientCertSecret:
@@ -16004,6 +16194,22 @@ spec:
                                                         type: object
                                                         x-kubernetes-map-type: atomic
                                                       usernameSecret:
+                                                        properties:
+                                                          key:
+                                                            type: string
+                                                          name:
+                                                            default: ""
+                                                            type: string
+                                                          optional:
+                                                            type: boolean
+                                                        required:
+                                                        - key
+                                                        type: object
+                                                        x-kubernetes-map-type: atomic
+                                                    type: object
+                                                  bearer:
+                                                    properties:
+                                                      tokenSecret:
                                                         properties:
                                                           key:
                                                             type: string
@@ -18722,6 +18928,36 @@ spec:
                                     usernameSecret:
                                       description: UsernameSecret is the secret selector
                                         to the repository username
+                                      properties:
+                                        key:
+                                          description: The key of the secret to select
+                                            from.  Must be a valid secret key.
+                                          type: string
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                        optional:
+                                          description: Specify whether the Secret
+                                            or its key must be defined
+                                          type: boolean
+                                      required:
+                                      - key
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                  type: object
+                                bearer:
+                                  description: BearerAuth describes the secret selector
+                                    required for bearer token authentication
+                                  properties:
+                                    tokenSecret:
+                                      description: TokenSecret is the secret selector
+                                        to the authentication bearer token
                                       properties:
                                         key:
                                           description: The key of the secret to select
@@ -23041,6 +23277,40 @@ spec:
                                                       type: object
                                                       x-kubernetes-map-type: atomic
                                                   type: object
+                                                bearer:
+                                                  description: BearerAuth describes
+                                                    the secret selector required for
+                                                    bearer token authentication
+                                                  properties:
+                                                    tokenSecret:
+                                                      description: TokenSecret is
+                                                        the secret selector to the
+                                                        authentication bearer token
+                                                      properties:
+                                                        key:
+                                                          description: The key of
+                                                            the secret to select from.  Must
+                                                            be a valid secret key.
+                                                          type: string
+                                                        name:
+                                                          default: ""
+                                                          description: |-
+                                                            Name of the referent.
+                                                            This field is effectively required, but due to backwards compatibility is
+                                                            allowed to be empty. Instances of this type with an empty value here are
+                                                            almost certainly wrong.
+                                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                          type: string
+                                                        optional:
+                                                          description: Specify whether
+                                                            the Secret or its key
+                                                            must be defined
+                                                          type: boolean
+                                                      required:
+                                                      - key
+                                                      type: object
+                                                      x-kubernetes-map-type: atomic
+                                                  type: object
                                                 clientCert:
                                                   description: ClientCertAuth holds
                                                     necessary information for client
@@ -24386,6 +24656,44 @@ spec:
                                                             description: UsernameSecret
                                                               is the secret selector
                                                               to the repository username
+                                                            properties:
+                                                              key:
+                                                                description: The key
+                                                                  of the secret to
+                                                                  select from.  Must
+                                                                  be a valid secret
+                                                                  key.
+                                                                type: string
+                                                              name:
+                                                                default: ""
+                                                                description: |-
+                                                                  Name of the referent.
+                                                                  This field is effectively required, but due to backwards compatibility is
+                                                                  allowed to be empty. Instances of this type with an empty value here are
+                                                                  almost certainly wrong.
+                                                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                                type: string
+                                                              optional:
+                                                                description: Specify
+                                                                  whether the Secret
+                                                                  or its key must
+                                                                  be defined
+                                                                type: boolean
+                                                            required:
+                                                            - key
+                                                            type: object
+                                                            x-kubernetes-map-type: atomic
+                                                        type: object
+                                                      bearer:
+                                                        description: BearerAuth describes
+                                                          the secret selector required
+                                                          for bearer token authentication
+                                                        properties:
+                                                          tokenSecret:
+                                                            description: TokenSecret
+                                                              is the secret selector
+                                                              to the authentication
+                                                              bearer token
                                                             properties:
                                                               key:
                                                                 description: The key
@@ -25866,6 +26174,38 @@ spec:
                                             usernameSecret:
                                               description: UsernameSecret is the secret
                                                 selector to the repository username
+                                              properties:
+                                                key:
+                                                  description: The key of the secret
+                                                    to select from.  Must be a valid
+                                                    secret key.
+                                                  type: string
+                                                name:
+                                                  default: ""
+                                                  description: |-
+                                                    Name of the referent.
+                                                    This field is effectively required, but due to backwards compatibility is
+                                                    allowed to be empty. Instances of this type with an empty value here are
+                                                    almost certainly wrong.
+                                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                  type: string
+                                                optional:
+                                                  description: Specify whether the
+                                                    Secret or its key must be defined
+                                                  type: boolean
+                                              required:
+                                              - key
+                                              type: object
+                                              x-kubernetes-map-type: atomic
+                                          type: object
+                                        bearer:
+                                          description: BearerAuth describes the secret
+                                            selector required for bearer token authentication
+                                          properties:
+                                            tokenSecret:
+                                              description: TokenSecret is the secret
+                                                selector to the authentication bearer
+                                                token
                                               properties:
                                                 key:
                                                   description: The key of the secret
@@ -28686,6 +29026,38 @@ spec:
                                             type: object
                                             x-kubernetes-map-type: atomic
                                         type: object
+                                      bearer:
+                                        description: BearerAuth describes the secret
+                                          selector required for bearer token authentication
+                                        properties:
+                                          tokenSecret:
+                                            description: TokenSecret is the secret
+                                              selector to the authentication bearer
+                                              token
+                                            properties:
+                                              key:
+                                                description: The key of the secret
+                                                  to select from.  Must be a valid
+                                                  secret key.
+                                                type: string
+                                              name:
+                                                default: ""
+                                                description: |-
+                                                  Name of the referent.
+                                                  This field is effectively required, but due to backwards compatibility is
+                                                  allowed to be empty. Instances of this type with an empty value here are
+                                                  almost certainly wrong.
+                                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                type: string
+                                              optional:
+                                                description: Specify whether the Secret
+                                                  or its key must be defined
+                                                type: boolean
+                                            required:
+                                            - key
+                                            type: object
+                                            x-kubernetes-map-type: atomic
+                                        type: object
                                       clientCert:
                                         description: ClientCertAuth holds necessary
                                           information for client authentication via
@@ -30091,6 +30463,38 @@ spec:
                                             type: object
                                             x-kubernetes-map-type: atomic
                                         type: object
+                                      bearer:
+                                        description: BearerAuth describes the secret
+                                          selector required for bearer token authentication
+                                        properties:
+                                          tokenSecret:
+                                            description: TokenSecret is the secret
+                                              selector to the authentication bearer
+                                              token
+                                            properties:
+                                              key:
+                                                description: The key of the secret
+                                                  to select from.  Must be a valid
+                                                  secret key.
+                                                type: string
+                                              name:
+                                                default: ""
+                                                description: |-
+                                                  Name of the referent.
+                                                  This field is effectively required, but due to backwards compatibility is
+                                                  allowed to be empty. Instances of this type with an empty value here are
+                                                  almost certainly wrong.
+                                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                type: string
+                                              optional:
+                                                description: Specify whether the Secret
+                                                  or its key must be defined
+                                                type: boolean
+                                            required:
+                                            - key
+                                            type: object
+                                            x-kubernetes-map-type: atomic
+                                        type: object
                                       clientCert:
                                         description: ClientCertAuth holds necessary
                                           information for client authentication via
@@ -31433,6 +31837,38 @@ spec:
                                             usernameSecret:
                                               description: UsernameSecret is the secret
                                                 selector to the repository username
+                                              properties:
+                                                key:
+                                                  description: The key of the secret
+                                                    to select from.  Must be a valid
+                                                    secret key.
+                                                  type: string
+                                                name:
+                                                  default: ""
+                                                  description: |-
+                                                    Name of the referent.
+                                                    This field is effectively required, but due to backwards compatibility is
+                                                    allowed to be empty. Instances of this type with an empty value here are
+                                                    almost certainly wrong.
+                                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                  type: string
+                                                optional:
+                                                  description: Specify whether the
+                                                    Secret or its key must be defined
+                                                  type: boolean
+                                              required:
+                                              - key
+                                              type: object
+                                              x-kubernetes-map-type: atomic
+                                          type: object
+                                        bearer:
+                                          description: BearerAuth describes the secret
+                                            selector required for bearer token authentication
+                                          properties:
+                                            tokenSecret:
+                                              description: TokenSecret is the secret
+                                                selector to the authentication bearer
+                                                token
                                               properties:
                                                 key:
                                                   description: The key of the secret
@@ -36087,6 +36523,40 @@ spec:
                                                     type: object
                                                     x-kubernetes-map-type: atomic
                                                 type: object
+                                              bearer:
+                                                description: BearerAuth describes
+                                                  the secret selector required for
+                                                  bearer token authentication
+                                                properties:
+                                                  tokenSecret:
+                                                    description: TokenSecret is the
+                                                      secret selector to the authentication
+                                                      bearer token
+                                                    properties:
+                                                      key:
+                                                        description: The key of the
+                                                          secret to select from.  Must
+                                                          be a valid secret key.
+                                                        type: string
+                                                      name:
+                                                        default: ""
+                                                        description: |-
+                                                          Name of the referent.
+                                                          This field is effectively required, but due to backwards compatibility is
+                                                          allowed to be empty. Instances of this type with an empty value here are
+                                                          almost certainly wrong.
+                                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                        type: string
+                                                      optional:
+                                                        description: Specify whether
+                                                          the Secret or its key must
+                                                          be defined
+                                                        type: boolean
+                                                    required:
+                                                    - key
+                                                    type: object
+                                                    x-kubernetes-map-type: atomic
+                                                type: object
                                               clientCert:
                                                 description: ClientCertAuth holds
                                                   necessary information for client
@@ -37408,6 +37878,43 @@ spec:
                                                           description: UsernameSecret
                                                             is the secret selector
                                                             to the repository username
+                                                          properties:
+                                                            key:
+                                                              description: The key
+                                                                of the secret to select
+                                                                from.  Must be a valid
+                                                                secret key.
+                                                              type: string
+                                                            name:
+                                                              default: ""
+                                                              description: |-
+                                                                Name of the referent.
+                                                                This field is effectively required, but due to backwards compatibility is
+                                                                allowed to be empty. Instances of this type with an empty value here are
+                                                                almost certainly wrong.
+                                                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                                              type: string
+                                                            optional:
+                                                              description: Specify
+                                                                whether the Secret
+                                                                or its key must be
+                                                                defined
+                                                              type: boolean
+                                                          required:
+                                                          - key
+                                                          type: object
+                                                          x-kubernetes-map-type: atomic
+                                                      type: object
+                                                    bearer:
+                                                      description: BearerAuth describes
+                                                        the secret selector required
+                                                        for bearer token authentication
+                                                      properties:
+                                                        tokenSecret:
+                                                          description: TokenSecret
+                                                            is the secret selector
+                                                            to the authentication
+                                                            bearer token
                                                           properties:
                                                             key:
                                                               description: The key

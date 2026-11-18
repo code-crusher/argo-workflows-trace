@@ -1,0 +1,28 @@
+# This example demonstrates the usage of bearer token authentication for an HTTP input artifact.
+# The token is read from a Kubernetes secret rather than being hard-wired into the Workflow.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  labels:
+    workflows.argoproj.io/no-test: "environment"
+  generateName: input-artifact-http-bearer-auth-
+spec:
+  entrypoint: http-artifact-bearer-example
+  templates:
+  - name: http-artifact-bearer-example
+    inputs:
+      artifacts:
+      - name: secret-file
+        path: /secret-file
+        http:
+          url: https://myhttpserver.com/secret-file
+          auth:
+            bearer:
+              # bearer.tokenSecret: points to a kubernetes secret named bearer-sec with a data entry of "token"
+              tokenSecret:
+                name: bearer-sec
+                key: token
+    container:
+      image: debian:latest
+      command: [sh, -c]
+      args: ["cat /secret-file"]
