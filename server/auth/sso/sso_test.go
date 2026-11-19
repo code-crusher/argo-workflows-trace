@@ -2,11 +2,14 @@ package sso
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -233,6 +236,111 @@ func TestTokenFitsInCookie(t *testing.T) {
 	roundTripped, err := ssoObject.Authorize(Prefix + raw)
 	require.NoError(t, err)
 	assert.Equal(t, groups, roundTripped.Groups)
+}
+
+// TestHandleCallbackGroupsFromUserInfo covers reading groups from the
+// user-info endpoint, both from the default "groups" claim and from the claim
+// named by customGroupClaimName.
+// https://github.com/argoproj/argo-workflows/issues/15803
+func TestHandleCallbackGroupsFromUserInfo(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		customClaimName  string
+		userInfoResponse string
+		expectedGroups   []string
+	}{
+		{
+			name:             "DefaultGroupsClaim",
+			userInfoResponse: `{"sub":"test-user","groups":["argo_admins"]}`,
+			expectedGroups:   []string{"argo_admins"},
+		},
+		{
+			name:             "CustomGroupClaimName",
+			customClaimName:  "ad_groups",
+			userInfoResponse: `{"sub":"test-user","ad_groups":["argo_admins","argo_users"]}`,
+			expectedGroups:   []string{"argo_admins", "argo_users"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ssoObject := newTestSsoWithUserInfo(t, tc.userInfoResponse)
+			ssoObject.customClaimName = tc.customClaimName
+			ssoObject.userInfoPath = "/userinfo"
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/oauth2/callback?code=test-code&state=test-state", nil)
+			request.AddCookie(&http.Cookie{Name: "test-state", Value: "/"})
+			ssoObject.HandleCallback(recorder, request)
+			require.Equal(t, http.StatusFound, recorder.Code, "unexpected status: %s", recorder.Body.String())
+
+			var authCookie *http.Cookie
+			for _, c := range recorder.Result().Cookies() {
+				if c.Name == "authorization" {
+					authCookie = c
+				}
+			}
+			require.NotNil(t, authCookie)
+
+			claims, err := ssoObject.Authorize(authCookie.Value)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expectedGroups, claims.Groups)
+			assert.Equal(t, "test-subject", claims.Subject)
+		})
+	}
+}
+
+// newTestSsoWithUserInfo returns an sso that exchanges an authorization code at
+// a fake provider and serves userInfoResponse from its user-info endpoint.
+func newTestSsoWithUserInfo(t *testing.T, userInfoResponse string) *sso {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: key}, nil)
+	require.NoError(t, err)
+
+	var httpServer *httptest.Server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		rawIDToken, err := jwt.Signed(signer).Claims(map[string]any{
+			"iss": httpServer.URL,
+			"sub": "test-subject",
+			"aud": []string{"test-client"},
+			"exp": time.Now().Add(time.Hour).Unix(),
+		}).Serialize()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "test-access-token",
+			"token_type":   "Bearer",
+			"id_token":     rawIDToken,
+		})
+	})
+	mux.HandleFunc("/userinfo", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-access-token" {
+			http.Error(w, "missing access token", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(userInfoResponse))
+	})
+	httpServer = httptest.NewServer(mux)
+	t.Cleanup(httpServer.Close)
+
+	ssoObject := newTestSso(t)
+	ssoObject.issuer = httpServer.URL
+	ssoObject.idTokenVerifier = oidc.NewVerifier(httpServer.URL, &oidc.StaticKeySet{PublicKeys: []crypto.PublicKey{key.Public()}}, &oidc.Config{ClientID: "test-client"})
+	ssoObject.config = &oauth2.Config{
+		ClientID:     "test-client",
+		ClientSecret: "test-client-secret",
+		Endpoint:     oauth2.Endpoint{TokenURL: httpServer.URL + "/token"},
+	}
+	ssoObject.httpClient = httpServer.Client()
+	ssoObject.expiry = time.Hour
+	ssoObject.baseHRef = "/"
+	ssoObject.logger = logging.RequireLoggerFromContext(logging.TestContext(t.Context()))
+	return ssoObject
 }
 
 func newTestSso(t *testing.T) *sso {

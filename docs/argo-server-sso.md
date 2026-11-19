@@ -221,6 +221,18 @@ sso:
   userInfoPath: /oauth2/v1/userinfo
 ```
 
+The groups are read from the `groups` claim of the user-info response.
+
+> v4.2 and after
+
+To read them from a claim with another name, set `customGroupClaimName` as well.
+
+```yaml
+sso:
+  userInfoPath: /oauth2/v1/userinfo
+  customGroupClaimName: argo_groups
+```
+
 ### Example Expression
 
 ```bash

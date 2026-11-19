@@ -86,7 +86,10 @@ func (c *Claims) GetCustomGroup(customKeyName string) ([]string, error) {
 	return newSlice, nil
 }
 
-func (c *Claims) GetUserInfoGroups(ctx context.Context, httpClient HTTPClient, accessToken, issuer, userInfoPath string) ([]string, error) {
+// GetUserInfoGroups fetches the groups from the user-info endpoint. When
+// customKeyName is set, the groups are read from that claim instead of the
+// default "groups" claim.
+func (c *Claims) GetUserInfoGroups(ctx context.Context, httpClient HTTPClient, accessToken, issuer, userInfoPath, customKeyName string) ([]string, error) {
 	url := fmt.Sprintf("%s%s", issuer, userInfoPath)
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 
@@ -102,10 +105,17 @@ func (c *Claims) GetUserInfoGroups(ctx context.Context, httpClient HTTPClient, a
 	if err != nil {
 		return nil, err
 	}
+	defer response.Body.Close()
+
+	if customKeyName != "" {
+		userInfo := &Claims{}
+		if err := json.NewDecoder(response.Body).Decode(userInfo); err != nil {
+			return nil, err
+		}
+		return userInfo.GetCustomGroup(customKeyName)
+	}
 
 	userInfo := UserInfo{}
-
-	defer response.Body.Close()
 	err = json.NewDecoder(response.Body).Decode(&userInfo)
 
 	if err != nil {

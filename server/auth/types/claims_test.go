@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/go-jose/go-jose/v4/jwt"
@@ -240,8 +241,35 @@ func TestGetUserInfoGroups(t *testing.T) {
 		httpClient = &HTTPClientMock{StatusCode: 200, Body: body}
 
 		claims := &Claims{}
-		groups, err := claims.GetUserInfoGroups(ctx, httpClient, "Bearer fake", "https://fake.okta.com", "/user-info")
+		groups, err := claims.GetUserInfoGroups(ctx, httpClient, "Bearer fake", "https://fake.okta.com", "/user-info", "")
 		assert.Equal(t, []string{"Everyone"}, groups)
 		require.NoError(t, err)
+	})
+	t.Run("CustomGroupNameSet", func(t *testing.T) {
+		ctx := logging.TestContext(t.Context())
+		body := io.NopCloser(strings.NewReader(`{"sub":"test-user","ad_groups":["group1","group2"]}`))
+
+		claims := &Claims{}
+		groups, err := claims.GetUserInfoGroups(ctx, &HTTPClientMock{StatusCode: 200, Body: body}, "Bearer fake", "https://fake.okta.com", "/user-info", "ad_groups")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"group1", "group2"}, groups)
+	})
+	t.Run("CustomGroupNameNotInResponse", func(t *testing.T) {
+		ctx := logging.TestContext(t.Context())
+		body := io.NopCloser(strings.NewReader(`{"groups":["Everyone"]}`))
+
+		claims := &Claims{}
+		groups, err := claims.GetUserInfoGroups(ctx, &HTTPClientMock{StatusCode: 200, Body: body}, "Bearer fake", "https://fake.okta.com", "/user-info", "ad_groups")
+		require.EqualError(t, err, "no claim found for key: ad_groups")
+		assert.Nil(t, groups)
+	})
+	t.Run("CustomGroupNameNotAnArray", func(t *testing.T) {
+		ctx := logging.TestContext(t.Context())
+		body := io.NopCloser(strings.NewReader(`{"ad_groups":"not-an-array"}`))
+
+		claims := &Claims{}
+		groups, err := claims.GetUserInfoGroups(ctx, &HTTPClientMock{StatusCode: 200, Body: body}, "Bearer fake", "https://fake.okta.com", "/user-info", "ad_groups")
+		require.EqualError(t, err, "expected an array, got not-an-array")
+		assert.Nil(t, groups)
 	})
 }
