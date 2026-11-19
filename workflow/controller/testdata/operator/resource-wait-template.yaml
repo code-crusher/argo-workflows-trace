@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: resource-wait-template
+spec:
+  entrypoint: wait-for-deletion
+  templates:
+  - name: wait-for-deletion
+    resource:
+      action: wait
+      waitFor: delete
+      manifest: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: resource-wait-cm

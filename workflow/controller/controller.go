@@ -239,6 +239,10 @@ func NewWorkflowController(ctx context.Context, restConfig *rest.Config, kubecli
 		return nil, err
 	}
 
+	// The pod-free resource wait action resolves kinds against the cluster's
+	// discovery data; the mapper is built lazily from this config.
+	controllerRestConfig = restConfig
+
 	wfc := WorkflowController{
 		restConfig:                 restConfig,
 		kubeclientset:              kubeclientset,

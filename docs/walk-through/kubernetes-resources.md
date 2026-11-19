@@ -46,6 +46,33 @@ spec:
 **Note:**
 Currently only a single resource can be managed by a resource template so either a `generateName` or `name` must be provided in the resource's meta-data.
 
+## Wait for a resource to be deleted
+
+Use `action: wait` with `waitFor: delete` to block a workflow until a resource is fully deleted.
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: k8s-wait-for-deletion-
+spec:
+  entrypoint: wait-for-deletion
+  templates:
+  - name: wait-for-deletion
+    resource:
+      action: wait                 # wait is executed by the workflow controller
+      waitFor: delete              # the condition to wait for, must be delete
+      manifest: |                  # identifies the resource to wait for
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: my-job
+```
+
+Unlike the other actions, `wait` runs in the workflow controller and creates no pod.
+The step succeeds as soon as the resource named in the `manifest` no longer exists, so a resource that was already deleted (or never existed) succeeds immediately.
+`activeDeadlineSeconds` bounds the wait: when it is exceeded, the step fails ([example](https://github.com/argoproj/argo-workflows/tree/main/examples/k8s-wait-for-deletion.yaml)).
+
 Resources created in this way are independent of the workflow. If you want the resource to be deleted when the workflow is deleted then you can use [Kubernetes garbage collection](https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/) with the workflow resource as an owner reference ([example](https://github.com/argoproj/argo-workflows/tree/main/examples/k8s-owner-reference.yaml)).
 
 You can also collect data about the resource in output parameters (see more at [k8s-jobs.yaml](https://github.com/argoproj/argo-workflows/tree/main/examples/k8s-jobs.yaml))

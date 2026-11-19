@@ -1506,7 +1506,176 @@ func TestInvalidResourceWorkflow(t *testing.T) {
 
 	wf = unmarshalWf(invalidActionResourceWorkflow)
 	err = Workflow(ctx, wftmplGetter, cwftmplGetter, wf, nil, Opts{})
-	require.EqualError(t, err, "templates.whalesay.resource.action must be one of: get, create, apply, delete, replace, patch")
+	require.EqualError(t, err, "templates.whalesay.resource.action must be one of: get, create, apply, delete, replace, patch, wait")
+}
+
+var validWaitResourceWorkflow = `
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: valid-wait-resource-
+spec:
+  entrypoint: wait-for-deletion
+  templates:
+  - name: wait-for-deletion
+    resource:
+      action: wait
+      waitFor: delete
+      manifest: |
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: my-job
+`
+
+// TestValidWaitResourceWorkflow verifies a workflow of the wait resource action.
+func TestValidWaitResourceWorkflow(t *testing.T) {
+	wf := unmarshalWf(validWaitResourceWorkflow)
+	err := Workflow(logging.TestContext(t.Context()), wftmplGetter, cwftmplGetter, wf, nil, Opts{})
+	require.NoError(t, err)
+}
+
+// TestInvalidWaitResourceWorkflow verifies the wait action rejects the fields
+// that only make sense when the executor runs the action in a pod.
+func TestInvalidWaitResourceWorkflow(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+	tests := []struct {
+		name     string
+		tmplYAML string
+		wantErr  string
+	}{{
+		name: "waitFor is required",
+		tmplYAML: `
+  - name: wait-for-deletion
+    resource:
+      action: wait
+      manifest: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: my-cm
+`,
+		wantErr: "templates.wait-for-deletion.resource.waitFor must be one of: delete",
+	}, {
+		name: "waitFor must be a known condition",
+		tmplYAML: `
+  - name: wait-for-deletion
+    resource:
+      action: wait
+      waitFor: condition
+      manifest: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: my-cm
+`,
+		wantErr: "templates.wait-for-deletion.resource.waitFor must be one of: delete",
+	}, {
+		name: "successCondition is not supported",
+		tmplYAML: `
+  - name: wait-for-deletion
+    resource:
+      action: wait
+      waitFor: delete
+      successCondition: status.phase == Succeeded
+      manifest: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: my-cm
+`,
+		wantErr: "not supported for action wait",
+	}, {
+		name: "flags are not supported",
+		tmplYAML: `
+  - name: wait-for-deletion
+    resource:
+      action: wait
+      waitFor: delete
+      flags: ["--all-namespaces"]
+      manifest: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: my-cm
+`,
+		wantErr: "templates.wait-for-deletion.resource.flags are not supported for action wait",
+	}, {
+		name: "setOwnerReference is not supported",
+		tmplYAML: `
+  - name: wait-for-deletion
+    resource:
+      action: wait
+      waitFor: delete
+      setOwnerReference: true
+      manifest: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: my-cm
+`,
+		wantErr: "templates.wait-for-deletion.resource.setOwnerReference is not supported for action wait",
+	}, {
+		name: "manifestFrom is not supported",
+		tmplYAML: `
+  - name: wait-for-deletion
+    resource:
+      action: wait
+      waitFor: delete
+      manifestFrom:
+        artifact:
+          name: my-artifact
+    inputs:
+      artifacts:
+      - name: my-artifact
+        path: /tmp/my-artifact
+        optional: true
+`,
+		wantErr: "templates.wait-for-deletion.resource.manifestFrom is not supported for action wait",
+	}, {
+		name: "outputs are not supported",
+		tmplYAML: `
+  - name: wait-for-deletion
+    resource:
+      action: wait
+      waitFor: delete
+      manifest: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: my-cm
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          jqFilter: .
+`,
+		wantErr: "templates.wait-for-deletion.outputs.parameters are not supported for action wait",
+	}, {
+		name: "manifest is still required",
+		tmplYAML: `
+  - name: wait-for-deletion
+    resource:
+      action: wait
+      waitFor: delete
+`,
+		wantErr: "templates.wait-for-deletion.resource.manifest or templates.wait-for-deletion.resource.manifestFrom must be specified",
+	}}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			wf := unmarshalWf(`
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: invalid-wait-resource-
+spec:
+  entrypoint: wait-for-deletion
+  templates:
+` + tc.tmplYAML)
+			err := Workflow(ctx, wftmplGetter, cwftmplGetter, wf, nil, Opts{})
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
 }
 
 var invalidPodGC = `

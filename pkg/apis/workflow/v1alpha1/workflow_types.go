@@ -113,6 +113,7 @@ const (
 	NodeTypeSuspend   NodeType = "Suspend"
 	NodeTypeHTTP      NodeType = "HTTP"
 	NodeTypePlugin    NodeType = "Plugin"
+	NodeTypeWait      NodeType = "Wait"
 )
 
 // ArtifactGCStrategy is the strategy when to delete artifacts for GC.
@@ -3424,9 +3425,15 @@ type ScriptTemplate struct {
 // +kubebuilder:validation:XValidation:rule="(has(self.manifest) && !has(self.manifestFrom)) || (!has(self.manifest) && has(self.manifestFrom)) || (!has(self.manifest) && !has(self.manifestFrom))",message="only one of manifest or manifestFrom can be specified"
 type ResourceTemplate struct {
 	// Action is the action to perform to the resource.
-	// Must be one of: get, create, apply, delete, replace, patch
-	// +kubebuilder:validation:Enum=get;create;apply;delete;replace;patch
+	// Must be one of: get, create, apply, delete, replace, patch, wait
+	// +kubebuilder:validation:Enum=get;create;apply;delete;replace;patch;wait
 	Action string `json:"action" protobuf:"bytes,1,opt,name=action"`
+
+	// WaitFor is the condition to wait for when action is "wait".
+	// It is executed by the workflow controller, without creating a pod.
+	// Must be one of: delete
+	// +kubebuilder:validation:Enum=delete
+	WaitFor string `json:"waitFor,omitempty" protobuf:"bytes,9,opt,name=waitFor"`
 
 	// MergeStrategy is the strategy used to merge a patch. It defaults to "strategic"
 	// Must be one of: strategic, merge, json
@@ -3457,6 +3464,20 @@ type ResourceTemplate struct {
 	// ]
 	Flags []string `json:"flags,omitempty" protobuf:"varint,7,opt,name=flags"`
 }
+
+// IsWaitAction returns whether this template's action is "wait", which the
+// workflow controller executes itself, without creating a pod.
+func (rt *ResourceTemplate) IsWaitAction() bool {
+	return rt != nil && rt.Action == ResourceWaitAction
+}
+
+// Resource actions
+const (
+	// ResourceWaitAction is the pod-free action executed by the controller.
+	ResourceWaitAction = "wait"
+	// ResourceWaitForDelete waits until the resource is fully deleted.
+	ResourceWaitForDelete = "delete"
+)
 
 type ManifestFrom struct {
 	// Artifact contains the artifact to use
@@ -3503,7 +3524,12 @@ func (tmpl *Template) GetNodeType() NodeType {
 		return NodeTypeRetry
 	}
 	switch tmpl.GetType() {
-	case TemplateTypeContainer, TemplateTypeContainerSet, TemplateTypeScript, TemplateTypeResource, TemplateTypeData:
+	case TemplateTypeContainer, TemplateTypeContainerSet, TemplateTypeScript, TemplateTypeData:
+		return NodeTypePod
+	case TemplateTypeResource:
+		if tmpl.Resource.IsWaitAction() {
+			return NodeTypeWait
+		}
 		return NodeTypePod
 	case TemplateTypeDAG:
 		return NodeTypeDAG
@@ -3523,7 +3549,9 @@ func (tmpl *Template) GetNodeType() NodeType {
 func (tmpl *Template) IsPodType() bool {
 	switch tmpl.GetType() {
 	case TemplateTypeContainer, TemplateTypeContainerSet, TemplateTypeScript, TemplateTypeResource, TemplateTypeData:
-		return true
+		// A resource template with the wait action runs entirely in the
+		// controller, so it does not create a pod.
+		return tmpl.GetType() != TemplateTypeResource || tmpl.Resource == nil || !tmpl.Resource.IsWaitAction()
 	}
 	return false
 }

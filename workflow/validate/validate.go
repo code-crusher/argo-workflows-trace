@@ -925,10 +925,42 @@ func (tctx *templateValidationCtx) validateLeaf(scope map[string]any, tmplCtx *t
 	if tmpl.Resource != nil {
 		if !placeholderGenerator.IsPlaceholder(tmpl.Resource.Action) {
 			switch tmpl.Resource.Action {
-			case "get", "create", "apply", "delete", "replace", "patch":
+			case "get", "create", "apply", "delete", "replace", "patch", "wait":
 				// OK
 			default:
-				return errors.Errorf(errors.CodeBadRequest, "templates.%s.resource.action must be one of: get, create, apply, delete, replace, patch", tmpl.Name)
+				return errors.Errorf(errors.CodeBadRequest, "templates.%s.resource.action must be one of: get, create, apply, delete, replace, patch, wait", tmpl.Name)
+			}
+		}
+		if tmpl.Resource.Action == "wait" {
+			if !placeholderGenerator.IsPlaceholder(tmpl.Resource.WaitFor) {
+				switch tmpl.Resource.WaitFor {
+				case "delete":
+					// OK
+				default:
+					return errors.Errorf(errors.CodeBadRequest, "templates.%s.resource.waitFor must be one of: delete", tmpl.Name)
+				}
+			}
+			// successCondition and failureCondition are only evaluated by the
+			// executor, which does not run for the pod-free wait action.
+			if tmpl.Resource.SuccessCondition != "" || tmpl.Resource.FailureCondition != "" {
+				return errors.Errorf(errors.CodeBadRequest, "templates.%s.resource.successCondition and templates.%s.resource.failureCondition are not supported for action wait", tmpl.Name, tmpl.Name)
+			}
+			// The controller resolves the target itself, so fields that only
+			// make sense for the kubectl invocation are rejected.
+			if len(tmpl.Resource.Flags) > 0 {
+				return errors.Errorf(errors.CodeBadRequest, "templates.%s.resource.flags are not supported for action wait", tmpl.Name)
+			}
+			if tmpl.Resource.SetOwnerReference {
+				return errors.Errorf(errors.CodeBadRequest, "templates.%s.resource.setOwnerReference is not supported for action wait", tmpl.Name)
+			}
+			if tmpl.Resource.ManifestFrom != nil {
+				return errors.Errorf(errors.CodeBadRequest, "templates.%s.resource.manifestFrom is not supported for action wait", tmpl.Name)
+			}
+			// Output parameters are extracted by the executor from the resource
+			// it just acted on; there is no resource to extract from once it is
+			// deleted, and no executor to do it.
+			if len(tmpl.Outputs.Parameters) > 0 {
+				return errors.Errorf(errors.CodeBadRequest, "templates.%s.outputs.parameters are not supported for action wait", tmpl.Name)
 			}
 		}
 		if tmpl.Resource.Action != "delete" && tmpl.Resource.Action != "get" {

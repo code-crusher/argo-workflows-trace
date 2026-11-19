@@ -1,0 +1,77 @@
+# This example demonstrates the pod-free `action: wait` resource template, which
+# blocks in the workflow controller — no pod is created — until the resource named
+# in the manifest is fully deleted.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: k8s-wait-for-deletion-
+spec:
+  entrypoint: main
+  templates:
+  - name: main
+    steps:
+    - - name: create-job
+        template: create-job
+    - - name: delete-job
+        template: delete-job
+        arguments:
+          parameters:
+          - name: job-name
+            value: '{{steps.create-job.outputs.parameters.job-name}}'
+    - - name: wait-for-job-deleted
+        template: wait-for-job-deleted
+        arguments:
+          parameters:
+          - name: job-name
+            value: '{{steps.create-job.outputs.parameters.job-name}}'
+
+  - name: create-job
+    resource:
+      action: create
+      manifest: |
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          generateName: wait-for-deletion-job-
+        spec:
+          template:
+            spec:
+              containers:
+              - name: pi
+                image: python:alpine3.23
+                command: ["python", "-c", "print(3.14159)"]
+              restartPolicy: Never
+    outputs:
+      parameters:
+      - name: job-name
+        valueFrom:
+          jsonPath: '{.metadata.name}'
+
+  - name: delete-job
+    inputs:
+      parameters:
+      - name: job-name
+    resource:
+      action: delete
+      manifest: |
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: '{{inputs.parameters.job-name}}'
+
+  # If the resource does not exist when this step starts, the step succeeds
+  # immediately. activeDeadlineSeconds sets a timeout: the step fails once the
+  # resource has not been deleted within that many seconds.
+  - name: wait-for-job-deleted
+    inputs:
+      parameters:
+      - name: job-name
+    activeDeadlineSeconds: 300
+    resource:
+      action: wait
+      waitFor: delete
+      manifest: |
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: '{{inputs.parameters.job-name}}'

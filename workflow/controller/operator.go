@@ -3295,7 +3295,7 @@ func (woc *wfOperationCtx) getOutboundNodes(ctx context.Context, nodeID string) 
 		woc.log.WithPanic().WithField("nodeID", nodeID).Error(ctx, "was unable to obtain node")
 	}
 	switch node.Type {
-	case wfv1.NodeTypeSkipped, wfv1.NodeTypeSuspend, wfv1.NodeTypeHTTP, wfv1.NodeTypePlugin:
+	case wfv1.NodeTypeSkipped, wfv1.NodeTypeSuspend, wfv1.NodeTypeHTTP, wfv1.NodeTypePlugin, wfv1.NodeTypeWait:
 		return []string{node.ID}
 	case wfv1.NodeTypePod:
 
@@ -3820,6 +3820,11 @@ func (woc *wfOperationCtx) addChildNode(ctx context.Context, parent string, chil
 
 // executeResource is runs a kubectl command against a manifest
 func (woc *wfOperationCtx) executeResource(ctx context.Context, nodeName string, templateScope string, tmpl *wfv1.Template, orgTmpl wfv1.TemplateReferenceHolder, opts *executeTemplateOpts) (*wfv1.NodeStatus, error) {
+	// The wait action runs entirely in the controller: no pod, no kubectl.
+	if tmpl.Resource.IsWaitAction() {
+		return woc.executeWaitResource(ctx, nodeName, templateScope, tmpl, orgTmpl, opts)
+	}
+
 	node, err := woc.wf.GetNodeByName(nodeName)
 
 	if err != nil {

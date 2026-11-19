@@ -12844,6 +12844,7 @@ spec:
                         - delete
                         - replace
                         - patch
+                        - wait
                         type: string
                       failureCondition:
                         type: string
@@ -13466,6 +13467,10 @@ spec:
                       setOwnerReference:
                         type: boolean
                       successCondition:
+                        type: string
+                      waitFor:
+                        enum:
+                        - delete
                         type: string
                     required:
                     - action
@@ -30887,7 +30892,7 @@ spec:
                         action:
                           description: |-
                             Action is the action to perform to the resource.
-                            Must be one of: get, create, apply, delete, replace, patch
+                            Must be one of: get, create, apply, delete, replace, patch, wait
                           enum:
                           - get
                           - create
@@ -30895,6 +30900,7 @@ spec:
                           - delete
                           - replace
                           - patch
+                          - wait
                           type: string
                         failureCondition:
                           description: |-
@@ -32062,6 +32068,14 @@ spec:
                           description: |-
                             SuccessCondition is a label selector expression which describes the conditions
                             of the k8s resource in which it is acceptable to proceed to the following step
+                          type: string
+                        waitFor:
+                          description: |-
+                            WaitFor is the condition to wait for when action is "wait".
+                            It is executed by the workflow controller, without creating a pod.
+                            Must be one of: delete
+                          enum:
+                          - delete
                           type: string
                       required:
                       - action
@@ -55891,6 +55905,7 @@ spec:
                             - delete
                             - replace
                             - patch
+                            - wait
                             type: string
                           failureCondition:
                             type: string
@@ -56513,6 +56528,10 @@ spec:
                           setOwnerReference:
                             type: boolean
                           successCondition:
+                            type: string
+                          waitFor:
+                            enum:
+                            - delete
                             type: string
                         required:
                         - action
@@ -74248,7 +74267,7 @@ spec:
                             action:
                               description: |-
                                 Action is the action to perform to the resource.
-                                Must be one of: get, create, apply, delete, replace, patch
+                                Must be one of: get, create, apply, delete, replace, patch, wait
                               enum:
                               - get
                               - create
@@ -74256,6 +74275,7 @@ spec:
                               - delete
                               - replace
                               - patch
+                              - wait
                               type: string
                             failureCondition:
                               description: |-
@@ -75468,6 +75488,14 @@ spec:
                               description: |-
                                 SuccessCondition is a label selector expression which describes the conditions
                                 of the k8s resource in which it is acceptable to proceed to the following step
+                              type: string
+                            waitFor:
+                              description: |-
+                                WaitFor is the condition to wait for when action is "wait".
+                                It is executed by the workflow controller, without creating a pod.
+                                Must be one of: delete
+                              enum:
+                              - delete
                               type: string
                           required:
                           - action
@@ -101856,6 +101884,7 @@ spec:
                         - delete
                         - replace
                         - patch
+                        - wait
                         type: string
                       failureCondition:
                         type: string
@@ -102478,6 +102507,10 @@ spec:
                       setOwnerReference:
                         type: boolean
                       successCondition:
+                        type: string
+                      waitFor:
+                        enum:
+                        - delete
                         type: string
                     required:
                     - action
@@ -119899,7 +119932,7 @@ spec:
                         action:
                           description: |-
                             Action is the action to perform to the resource.
-                            Must be one of: get, create, apply, delete, replace, patch
+                            Must be one of: get, create, apply, delete, replace, patch, wait
                           enum:
                           - get
                           - create
@@ -119907,6 +119940,7 @@ spec:
                           - delete
                           - replace
                           - patch
+                          - wait
                           type: string
                         failureCondition:
                           description: |-
@@ -121074,6 +121108,14 @@ spec:
                           description: |-
                             SuccessCondition is a label selector expression which describes the conditions
                             of the k8s resource in which it is acceptable to proceed to the following step
+                          type: string
+                        waitFor:
+                          description: |-
+                            WaitFor is the condition to wait for when action is "wait".
+                            It is executed by the workflow controller, without creating a pod.
+                            Must be one of: delete
+                          enum:
+                          - delete
                           type: string
                       required:
                       - action
@@ -143251,6 +143293,7 @@ spec:
                           - delete
                           - replace
                           - patch
+                          - wait
                           type: string
                         failureCondition:
                           type: string
@@ -143865,6 +143908,10 @@ spec:
                         setOwnerReference:
                           type: boolean
                         successCondition:
+                          type: string
+                        waitFor:
+                          enum:
+                          - delete
                           type: string
                       required:
                       - action
@@ -161827,6 +161874,7 @@ spec:
                         - delete
                         - replace
                         - patch
+                        - wait
                         type: string
                       failureCondition:
                         type: string
@@ -162449,6 +162497,10 @@ spec:
                       setOwnerReference:
                         type: boolean
                       successCondition:
+                        type: string
+                      waitFor:
+                        enum:
+                        - delete
                         type: string
                     required:
                     - action
@@ -179870,7 +179922,7 @@ spec:
                         action:
                           description: |-
                             Action is the action to perform to the resource.
-                            Must be one of: get, create, apply, delete, replace, patch
+                            Must be one of: get, create, apply, delete, replace, patch, wait
                           enum:
                           - get
                           - create
@@ -179878,6 +179930,7 @@ spec:
                           - delete
                           - replace
                           - patch
+                          - wait
                           type: string
                         failureCondition:
                           description: |-
@@ -181045,6 +181098,14 @@ spec:
                           description: |-
                             SuccessCondition is a label selector expression which describes the conditions
                             of the k8s resource in which it is acceptable to proceed to the following step
+                          type: string
+                        waitFor:
+                          description: |-
+                            WaitFor is the condition to wait for when action is "wait".
+                            It is executed by the workflow controller, without creating a pod.
+                            Must be one of: delete
+                          enum:
+                          - delete
                           type: string
                       required:
                       - action
