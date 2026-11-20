@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: pending-timeout-continue-on
+spec:
+  entrypoint: main
+  templates:
+  - name: main
+    steps:
+    - - name: wrapper
+        template: wrapper
+        continueOn:
+          failed: true
+    - - name: after
+        template: noop
+  - name: wrapper
+    steps:
+    - - name: slow
+        template: never-schedules
+  - name: never-schedules
+    pendingTimeout: 2s
+    container:
+      image: docker/whalesay:latest
+      command: [cowsay]
+      args: ["hello world"]
+  - name: noop
+    container:
+      image: alpine
+      command: [sh, -c, "true"]

@@ -1524,6 +1524,15 @@ func (woc *wfOperationCtx) assessNodeStatus(ctx context.Context, pod *apiv1.Pod,
 		// This is equivalent to Pending — no status change needed.
 		return nil
 	case apiv1.PodPending:
+		// A pod that has not started yet reports no outcome of its own: the
+		// phase the node holds can only be one the controller recorded
+		// (pendingTimeout, shutdown, workflow deadline). Reverting it to
+		// Pending would strand the node — the pod is being deleted and the
+		// parent has typically already moved on (#17300). Only the pod's own
+		// result may replace a recorded phase (see node_phase_sm.go).
+		if old.Fulfilled() {
+			return nil
+		}
 		updated.Phase = wfv1.NodePending
 		updated.Message = getPendingReason(pod)
 		updated.Daemoned = nil

@@ -1695,6 +1695,22 @@ func TestAssessNodeStatus(t *testing.T) {
 		node:    &wfv1.NodeStatus{TemplateName: templateName},
 		wantNil: true,
 	}, {
+		name: "pod pending - node already failed by pendingTimeout must stay failed",
+		pod: &apiv1.Pod{
+			Status: apiv1.PodStatus{
+				Phase: apiv1.PodPending,
+				ContainerStatuses: []apiv1.ContainerStatus{
+					{
+						Name:  common.MainContainerName,
+						State: apiv1.ContainerState{Waiting: &apiv1.ContainerStateWaiting{Reason: "PodInitializing"}},
+					},
+				},
+			},
+		},
+		node:        &wfv1.NodeStatus{TemplateName: templateName, Phase: wfv1.NodeFailed, Message: "timeout", FinishedAt: metav1.Now()},
+		wantPhase:   wfv1.NodeFailed,
+		wantMessage: "timeout",
+	}, {
 		name: "pod failed - main container still running, init container finished",
 		pod: &apiv1.Pod{
 			Status: apiv1.PodStatus{
@@ -10681,6 +10697,61 @@ func TestTimeoutFailsPendingNodeBeforePendingTimeout(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, wfv1.NodeFailed, node.Phase)
 	assert.Equal(t, ErrTimeout.Error(), node.Message)
+}
+
+// TestPendingTimeoutDoesNotRevertFailedNode covers #17300: after a pendingTimeout
+// fails a pod node and queues its pod for deletion, the pod stays Pending in the
+// informer for as long as its termination takes (e.g. stuck in PodInitializing on
+// an unreachable node, whose graceful delete never completes). podReconciliation
+// must not revert the node to Pending then: the parent step group already failed
+// on the timeout and the node is never re-executed, so it would sit Pending with
+// finishedAt set in a workflow that otherwise runs to completion.
+func TestPendingTimeoutDoesNotRevertFailedNode(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+	cancel, controller := newController(ctx)
+	defer cancel()
+	wfcset := controller.wfclientset.ArgoprojV1alpha1().Workflows("my-ns")
+	wf := wfv1.MustUnmarshalWorkflow("@testdata/operator/pending-timeout-continue-on-wf.yaml")
+	wf, err := wfcset.Create(ctx, wf, metav1.CreateOptions{})
+	require.NoError(t, err)
+	woc := newWorkflowOperationCtx(ctx, wf, controller)
+	woc.operate(ctx)
+	makePodsPhase(ctx, woc, apiv1.PodPending)
+
+	// pendingTimeout is 2s: start the node 3s ago rather than sleeping
+	node, err := woc.wf.GetNodeByName("pending-timeout-continue-on[0].wrapper[0].slow")
+	require.NoError(t, err)
+	node.StartedAt = metav1.NewTime(time.Now().Add(-3 * time.Second))
+	woc.wf.Status.Nodes.Set(ctx, node.ID, *node)
+
+	woc = newWorkflowOperationCtx(ctx, woc.wf, controller)
+	woc.operate(ctx)
+
+	node, err = woc.wf.GetNodeByName("pending-timeout-continue-on[0].wrapper[0].slow")
+	require.NoError(t, err)
+	assert.Equal(t, wfv1.NodeFailed, node.Phase)
+	assert.Equal(t, ErrTimeout.Error(), node.Message)
+	failedAt := node.FinishedAt
+	require.False(t, failedAt.IsZero(), "the timeout set finishedAt")
+
+	// Only the second step's pod succeeds; the timed-out pod stays Pending in the
+	// store, terminating, like a real pod whose delete has not completed yet.
+	setPodPhases(ctx, woc, func(n *wfv1.NodeStatus) apiv1.PodPhase {
+		if n.Name == "pending-timeout-continue-on[1].after" {
+			return apiv1.PodSucceeded
+		}
+		return ""
+	})
+	woc = newWorkflowOperationCtx(ctx, woc.wf, controller)
+	woc.operate(ctx)
+
+	assert.Equal(t, wfv1.WorkflowSucceeded, woc.wf.Status.Phase)
+
+	node, err = woc.wf.GetNodeByName("pending-timeout-continue-on[0].wrapper[0].slow")
+	require.NoError(t, err)
+	assert.Equal(t, wfv1.NodeFailed, node.Phase, "node stays Failed after the pending pod's re-assessment")
+	assert.Equal(t, ErrTimeout.Error(), node.Message)
+	assert.Equal(t, failedAt, node.FinishedAt, "finishedAt is not re-set by the re-assessment")
 }
 
 // TestInferFailedReasonArtifactPluginSidecar ensures that a non-zero exit from

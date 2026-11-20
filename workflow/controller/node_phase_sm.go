@@ -15,7 +15,9 @@ import (
 //     does not list Error, such as Succeeded.
 //   - Pod reconciliation (podReconciliation, from assessNodeStatus) records
 //     a pod's own result directly with Nodes.Set, so a finishing pod can
-//     replace a phase the controller recorded.
+//     replace a phase the controller recorded. A pod that has not finished
+//     (Pending) cannot: assessNodeStatus leaves a fulfilled node alone
+//     (#17300), as the pod reports no result of its own.
 //   - clearStaleDaemonedRetries writes a Retry node directly with Nodes.Set
 //     (it clears the Daemoned flag; the phase is unchanged).
 //
