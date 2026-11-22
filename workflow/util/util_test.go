@@ -527,6 +527,272 @@ func TestFormulateRetryWorkflowDAGLeafWithOmittedChild(t *testing.T) {
 	assert.False(t, newWf.Status.Nodes.Has("wf-after"), "the omitted dependant must be re-created")
 }
 
+// A workflow stopped while a nested DAG ran: branch a had Succeeded and
+// branch b was interrupted, so the nested DAG was Failed by the shutdown and
+// its dependant after, never dispatched, was recorded Omitted. after is
+// linked under the outbound nodes work had at that moment, which are the
+// succeeded a: it is not in the failed subtree resetPath deletes, so before
+// #17134 it survived `argo retry` and, being Omitted (fulfilled), kept the
+// retried DAG from ever revisiting work. The retried workflow then reported
+// Succeeded with after never run (on older controllers it stayed Running for
+// ever).
+const stoppedNestedDAGWithOmittedDependantFixture = `
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: wf
+spec:
+  entrypoint: main
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: work
+        template: inner
+      - name: after
+        template: run
+        depends: work
+  - name: inner
+    dag:
+      tasks:
+      - name: a
+        template: run
+      - name: b
+        template: run
+      - name: c
+        template: run
+        depends: b
+  - name: run
+    container:
+      image: busybox
+status:
+  phase: Failed
+  message: "Stopped with strategy 'Stop'"
+  nodes:
+    wf:
+      id: wf
+      name: wf
+      type: DAG
+      phase: Failed
+      outboundNodes: [wf-after]
+      children: [wf-work]
+    wf-work:
+      id: wf-work
+      name: wf.work
+      type: DAG
+      boundaryID: wf
+      phase: Failed
+      message: "child 'wf-b' failed"
+      outboundNodes: [wf-a]
+      children: [wf-a, wf-b]
+    wf-a:
+      id: wf-a
+      name: wf.work.a
+      type: Pod
+      boundaryID: wf-work
+      phase: Succeeded
+      children: [wf-after]
+    wf-b:
+      id: wf-b
+      name: wf.work.b
+      type: Pod
+      boundaryID: wf-work
+      phase: Failed
+      message: "workflow shutdown with strategy:  Stop"
+    wf-after:
+      id: wf-after
+      name: wf.after
+      type: Skipped
+      boundaryID: wf
+      phase: Omitted
+      message: "omitted: depends condition not met"
+`
+
+func TestFormulateRetryWorkflowStoppedNestedDAGWithOmittedDependant(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+	wf := wfv1.MustUnmarshalWorkflow(stoppedNestedDAGWithOmittedDependantFixture)
+	newWf, _, err := FormulateRetryWorkflow(ctx, wf, false, "", nil)
+	require.NoError(t, err)
+	phase := func(id string) wfv1.NodePhase {
+		if n, err := newWf.Status.Nodes.Get(id); err == nil {
+			return n.Phase
+		}
+		return ""
+	}
+	assert.Equal(t, wfv1.NodeRunning, phase("wf-work"), "the stopped nested DAG must run again")
+	assert.False(t, newWf.Status.Nodes.Has("wf-b"), "the interrupted branch must be re-created")
+	assert.False(t, newWf.Status.Nodes.Has("wf-after"), "the dependant omitted by the stop must be re-created, or it never runs")
+	assert.Equal(t, wfv1.NodeSucceeded, phase("wf-a"), "the branch that finished is kept")
+}
+
+// An Omitted dependant of a task that the retry does not touch is kept: only
+// a task that runs again can make its dependants run again. Here after was
+// omitted because of A, which had Succeeded, while the unrelated task B
+// failed and is reset.
+const omittedDependantOfUntouchedTaskFixture = `
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: wf
+spec:
+  entrypoint: main
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: A
+        template: run
+        when: "false"
+      - name: after
+        template: run
+        depends: A
+      - name: B
+        template: run
+  - name: run
+    container:
+      image: busybox
+status:
+  phase: Failed
+  nodes:
+    wf:
+      id: wf
+      name: wf
+      type: DAG
+      phase: Failed
+      children: [wf-A, wf-after, wf-B]
+    wf-A:
+      id: wf-A
+      name: wf.A
+      type: Skipped
+      boundaryID: wf
+      phase: Skipped
+      message: "when 'false' evaluated false"
+      children: [wf-after]
+    wf-after:
+      id: wf-after
+      name: wf.after
+      type: Skipped
+      boundaryID: wf
+      phase: Omitted
+      message: "omitted: depends condition not met"
+    wf-B:
+      id: wf-B
+      name: wf.B
+      type: Pod
+      boundaryID: wf
+      phase: Failed
+`
+
+func TestFormulateRetryWorkflowKeepsOmittedDependantOfUntouchedTask(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+	wf := wfv1.MustUnmarshalWorkflow(omittedDependantOfUntouchedTaskFixture)
+	newWf, _, err := FormulateRetryWorkflow(ctx, wf, false, "", nil)
+	require.NoError(t, err)
+	assert.False(t, newWf.Status.Nodes.Has("wf-B"), "the failed task must be re-created")
+	assert.Equal(t, wfv1.NodeSkipped, newWf.Status.Nodes["wf-A"].Phase, "the skipped task is kept as skipped")
+	assert.Equal(t, wfv1.NodeOmitted, newWf.Status.Nodes["wf-after"].Phase, "its dependant stays omitted: A will not run again")
+}
+
+// A stopped nested DAG omits not just its direct dependant but, in turn, that
+// dependant's own dependants: here b was interrupted, so after is Omitted
+// under work's outbound a, and later is Omitted under after. Deleting after
+// (which depends on b, so must run again) would orphan later unless later is
+// deleted too: a node left with no parent makes the next `argo retry` fail
+// with "couldn't find parent node".
+const chainedOmittedDependantsFixture = `
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: wf
+spec:
+  entrypoint: main
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: work
+        template: inner
+      - name: after
+        template: run
+        depends: work
+      - name: later
+        template: run
+        depends: after
+  - name: inner
+    dag:
+      tasks:
+      - name: a
+        template: run
+      - name: b
+        template: run
+  - name: run
+    container:
+      image: busybox
+status:
+  phase: Failed
+  message: "Stopped with strategy 'Stop'"
+  nodes:
+    wf:
+      id: wf
+      name: wf
+      type: DAG
+      phase: Failed
+      outboundNodes: [wf-later]
+      children: [wf-work, wf-after]
+    wf-work:
+      id: wf-work
+      name: wf.work
+      type: DAG
+      boundaryID: wf
+      phase: Failed
+      message: "child 'wf-b' failed"
+      outboundNodes: [wf-a]
+      children: [wf-a, wf-b]
+    wf-a:
+      id: wf-a
+      name: wf.work.a
+      type: Pod
+      boundaryID: wf-work
+      phase: Succeeded
+      children: [wf-after]
+    wf-b:
+      id: wf-b
+      name: wf.work.b
+      type: Pod
+      boundaryID: wf-work
+      phase: Failed
+      message: "workflow shutdown with strategy:  Stop"
+    wf-after:
+      id: wf-after
+      name: wf.after
+      type: Skipped
+      boundaryID: wf
+      phase: Omitted
+      message: "omitted: depends condition not met"
+      children: [wf-later]
+    wf-later:
+      id: wf-later
+      name: wf.later
+      type: Skipped
+      boundaryID: wf
+      phase: Omitted
+      message: "omitted: depends condition not met"
+`
+
+func TestFormulateRetryWorkflowDeletesChainedOmittedDependants(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+	wf := wfv1.MustUnmarshalWorkflow(chainedOmittedDependantsFixture)
+	newWf, _, err := FormulateRetryWorkflow(ctx, wf, false, "", nil)
+	require.NoError(t, err)
+	assert.False(t, newWf.Status.Nodes.Has("wf-after"), "the dependant omitted by the stop must be re-created")
+	assert.False(t, newWf.Status.Nodes.Has("wf-later"), "its own dependant must go with it, or it is left without a parent")
+	// A second retry must still work: the surviving graph must have a parent
+	// for every node.
+	newWf.Status.Phase = wfv1.WorkflowFailed
+	_, _, err = FormulateRetryWorkflow(ctx, newWf, false, "", nil)
+	require.NoError(t, err, "a second retry of the same workflow")
+}
+
 // A's exit hook errored while fan ran, so fan created no more items and
 // completed from the one that ran, with the message that says so; pre had
 // completed. Retry must reset fan, keeping its item, so the retried DAG

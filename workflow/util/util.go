@@ -1307,6 +1307,49 @@ func isExecutionNodeType(nodeType wfv1.NodeType) bool {
 	return nodeType == wfv1.NodeTypeContainer || nodeType == wfv1.NodeTypePod || nodeType == wfv1.NodeTypeHTTP || nodeType == wfv1.NodeTypePlugin
 }
 
+// isDependantOfRetriedTask reports whether the Omitted node n depends on a
+// task node that the retry resets or deletes, i.e. whether a task that will
+// run again is one of the tasks n was waiting on when it was omitted.
+//
+// A dependant hangs off the outbound nodes of its dependencies, so those
+// dependencies are n's ancestors in the node graph. The walk stops at n's
+// boundary node: everything above it belongs to an enclosing template and is
+// not a dependency of n, so a task reset there must not delete n. Only an
+// ancestor inside the same DAG or step group (the same boundary) can be a
+// dependency: a dependency's own outbound nodes, which n hangs off, are
+// either the dependency task itself or nodes inside the template it ran, and
+// walking up from those reaches the dependency task.
+func isDependantOfRetriedTask(n *wfv1.NodeStatus, parents map[string][]string, nodes wfv1.Nodes, toReset, toDelete map[string]bool) bool {
+	if n.BoundaryID == "" {
+		return false
+	}
+	seen := map[string]bool{n.ID: true}
+	queue := []string{n.ID}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		for _, parentID := range parents[id] {
+			// The boundary node is the template n belongs to, not a task in it.
+			if seen[parentID] || parentID == n.BoundaryID {
+				continue
+			}
+			seen[parentID] = true
+			parent, ok := nodes[parentID]
+			if !ok {
+				continue
+			}
+			// Group nodes above a task (a StepGroup, a TaskGroup) share its
+			// boundary and are reset with it; a task node in the same boundary
+			// is a dependency.
+			if parent.BoundaryID == n.BoundaryID && (toReset[parentID] || toDelete[parentID]) {
+				return true
+			}
+			queue = append(queue, parentID)
+		}
+	}
+	return false
+}
+
 // dagSortedNodes sorts the nodes based on topological order, omits onExitNode
 func dagSortedNodes(nodes []*dagNode, rootNodeName string) []*dagNode {
 	sortedNodes := make([]*dagNode, 0)
@@ -1473,6 +1516,29 @@ func planReset(ctx context.Context, wf *wfv1.Workflow, restartSuccessful bool, n
 			if _, err := resetBoundaries(n, func(id string) { toReset[id] = true }); err != nil {
 				return resetPlan{}, err
 			}
+		}
+	}
+
+	// Delete the Omitted dependants of any task node that the retry resets or
+	// deletes, so that the retried template re-creates them when their
+	// dependency runs again. A dependant is linked under the outbound nodes
+	// its dependency had when it was omitted, and those may all have
+	// succeeded, so it is not in the failed subtree resetPath deletes. Left
+	// behind it stays Omitted, and an Omitted node is fulfilled: the
+	// dependency it was waiting on is never revisited, so neither the
+	// interrupted branch nor the dependant runs again (#17134).
+	parents := make(map[string][]string, len(wf.Status.Nodes))
+	for id, n := range wf.Status.Nodes {
+		for _, childID := range n.Children {
+			parents[childID] = append(parents[childID], id)
+		}
+	}
+	for _, n := range nodes {
+		if n.n.Type != wfv1.NodeTypeSkipped || n.n.Phase != wfv1.NodeOmitted || toDelete[n.n.ID] {
+			continue
+		}
+		if isDependantOfRetriedTask(n.n, parents, wf.Status.Nodes, toReset, toDelete) {
+			toDelete[n.n.ID] = true
 		}
 	}
 

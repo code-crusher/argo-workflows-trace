@@ -13192,3 +13192,118 @@ spec:
 		})
 	}
 }
+
+// TestRegressionR4_C100_StopRetryRunsOmittedDependantOfNestedDAG: a workflow
+// stopped while a nested DAG ran, with the status the controller recorded
+// (the graph from issue #17134). Branch a had Succeeded and branch b was
+// interrupted before c was created, so the nested DAG work was Failed by the
+// shutdown and its dependant after, never dispatched, was recorded Omitted.
+// after hangs off work's outbound nodes at that moment, which are the
+// succeeded a, so it is not in the failed subtree retry deletes. Left behind
+// it stays Omitted, and an Omitted node is fulfilled: the retried DAG never
+// revisits work, so b is never re-created and after never runs. On the
+// pre-Engine controller the workflow stayed Running for ever; on the Engine
+// the retry re-enters work and the workflow reports Succeeded with after
+// still Omitted, having silently skipped it. `argo retry` deletes the
+// Omitted dependant (#17134).
+func TestRegressionR4_C100_StopRetryRunsOmittedDependantOfNestedDAG(t *testing.T) {
+	ctx := logging.TestContext(t.Context())
+	wf := wfv1.MustUnmarshalWorkflow(r4C100StoppedStatus)
+	require.NoError(t, validate.Workflow(ctx, nil, nil, wfv1.MustUnmarshalWorkflow(r4C100StoppedNestedDAG), nil, validate.Opts{}))
+	cancel, controller := newController(ctx, wf)
+	defer cancel()
+
+	// argo retry, then drive the rest to Succeeded.
+	woc := r4Operate(t, ctx, controller, r4RetryStored(t, ctx, controller, wf))
+	require.False(t, woc.wf.Status.Phase.Completed(), "argo retry reopens the workflow")
+	require.Equal(t, wfv1.NodeRunning, r4NodePhase(woc, "r4-c100.work"), "the stopped nested DAG must run again")
+	assert.Empty(t, r4Parents(woc, "r4-c100.after"), "the dependant omitted by the stop is re-created, not left behind")
+
+	woc = r4DriveToEnd(t, ctx, controller, woc, 10)
+	require.Equal(t, wfv1.WorkflowSucceeded, woc.wf.Status.Phase, "nodes left unfulfilled: %v", r4Unfulfilled(woc))
+	for _, name := range []string{"r4-c100.work.a", "r4-c100.work.b", "r4-c100.work.c", "r4-c100.after"} {
+		assert.Equal(t, wfv1.NodeSucceeded, r4NodePhase(woc, name), name)
+	}
+	assert.Contains(t, r4PodNodeNames(ctx, t, woc), "r4-c100.after", "the dependant must actually run after the retry")
+}
+
+const r4C100StoppedNestedDAG = `
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: r4-c100
+  namespace: default
+spec:
+  entrypoint: main
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: work
+        template: inner
+      - name: after
+        template: work
+        depends: work
+  - name: inner
+    dag:
+      tasks:
+      - name: a
+        template: work
+      - name: b
+        template: work
+      - name: c
+        template: work
+        depends: b
+  - name: work
+    container:
+      image: alpine
+      command: [echo, hi]
+`
+
+// r4C100StoppedStatus is the status issue #17134 records after `argo stop`,
+// with the IDs the controller resolves for r4C100StoppedNestedDAG: a
+// Succeeded, b Failed by the shutdown, c never created, and after Omitted
+// under work's outbound node a.
+const r4C100StoppedStatus = r4C100StoppedNestedDAG + `
+status:
+  phase: Failed
+  message: "Stopped with strategy 'Stop'"
+  nodes:
+    r4-c100:
+      id: r4-c100
+      name: r4-c100
+      type: DAG
+      phase: Failed
+      outboundNodes: [r4-c100-2773230810]
+      children: [r4-c100-122238605]
+    r4-c100-122238605:
+      id: r4-c100-122238605
+      name: r4-c100.work
+      type: DAG
+      boundaryID: r4-c100
+      phase: Failed
+      message: "child 'r4-c100-3797397793' failed"
+      outboundNodes: [r4-c100-3747064936]
+      children: [r4-c100-3747064936, r4-c100-3797397793]
+    r4-c100-3747064936:
+      id: r4-c100-3747064936
+      name: r4-c100.work.a
+      type: Pod
+      boundaryID: r4-c100-122238605
+      phase: Succeeded
+      children: [r4-c100-2773230810]
+    r4-c100-3797397793:
+      id: r4-c100-3797397793
+      name: r4-c100.work.b
+      type: Pod
+      boundaryID: r4-c100-122238605
+      phase: Failed
+      message: "workflow shutdown with strategy:  Stop"
+    r4-c100-2773230810:
+      id: r4-c100-2773230810
+      name: r4-c100.after
+      type: Skipped
+      boundaryID: r4-c100
+      phase: Omitted
+      message: "omitted: depends condition not met"
+`
